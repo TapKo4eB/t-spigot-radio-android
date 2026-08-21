@@ -1,5 +1,6 @@
 package net.tspigot.radio
 
+import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,110 +19,143 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var controllerFuture: ListenableFuture<MediaController>
 
-    private var player: Player? = null
+    private var mediaController by mutableStateOf<MediaController?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
+
+        val sessionToken = SessionToken(
+            this,
+            ComponentName(this, PlaybackService::class.java)
+        )
+
+        controllerFuture = MediaController.Builder(
+            this,
+            sessionToken
+        ).buildAsync()
+
+        controllerFuture.addListener(
+            {
+                val controller = controllerFuture.get()
+                mediaController = controller
+
+                if (controller.mediaItemCount == 0) {
+                    val stationUrl =
+                        "https://radio.tspigot.net/radio/radio.mp3"
+
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(stationUrl)
+                        .setMediaId("station_1")
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle("My Radio Station")
+                                .setArtist("Live Radio")
+                                .build()
+                        )
+                        .build()
+
+                    controller.setMediaItem(mediaItem)
+                    controller.prepare()
+
+                    // Only call play here if playback has never started.
+                    controller.play()
+                }
+            },
+            ContextCompat.getMainExecutor(this)
+        )
+
         setContent {
             TSpigotRadioTheme {
-                PlayerScreen()
+                PlayerScreen(controller = mediaController)
             }
         }
     }
 
+    override fun onDestroy() {
+        if (::controllerFuture.isInitialized) {
+            MediaController.releaseFuture(controllerFuture)
+        }
+
+        super.onDestroy()
+    }
 }
 
 @Composable
 fun PlayerScreen(
+    controller: MediaController?,
     modifier: Modifier = Modifier
 ) {
-
-    val context = LocalContext.current
     var isPlaying by remember {
-        mutableStateOf(false)
+        mutableStateOf(controller?.isPlaying == true)
     }
 
-    val player = remember {
-        ExoPlayer.Builder(context)
-            .build()
-            .apply {
-                val mediaItem = MediaItem.fromUri(
-                    "https://radio.tspigot.net/radio/radio.mp3"
-                )
+    DisposableEffect(controller) {
+        if (controller == null) {
+            onDispose { }
+        } else {
+            // Immediately synchronize the UI with the current player state.
+            isPlaying = controller.isPlaying
 
-                setMediaItem(mediaItem)
-                prepare()
+            val listener = object : Player.Listener {
+                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                    isPlaying = isPlayingNow
+                }
 
-                addListener(
-                    object : Player.Listener {
-                        override fun onIsPlayingChanged(
-                            isPlayingNow: Boolean
-                        ) {
-                            isPlaying = isPlayingNow
-                        }
-
-                        override fun onPlaybackStateChanged(
-                            playbackState: Int
-                        ) {
-                            if (playbackState == Player.STATE_ENDED) {
-                                isPlaying = false
-                            }
-                        }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false
                     }
-                )
+                }
             }
-    }
-    DisposableEffect(player) {
-        onDispose {
-            player.release()
+
+            controller.addListener(listener)
+
+            onDispose {
+                controller.removeListener(listener)
+            }
         }
     }
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Button(
             modifier = modifier,
+            enabled = controller != null,
             onClick = {
-                if (player.isPlaying) {
-                    player.pause()
-                } else {
-                    player.play()
+                controller?.let {
+                    if (it.isPlaying) {
+                        it.pause()
+                    } else {
+                        it.play()
+                    }
                 }
             }
         ) {
             Text(
-                text = if (isPlaying) {
-                    "Stop"
-                } else {
-                    "Play"
+                text = when {
+                    controller == null -> "Connecting..."
+                    isPlaying -> "Pause"
+                    else -> "Play"
                 }
             )
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    TSpigotRadioTheme {
-        Greeting("Android")
     }
 }

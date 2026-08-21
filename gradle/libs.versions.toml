@@ -12,6 +12,7 @@ media3Exoplayer = "1.11.0"
 media3Ui = "1.11.0"
 media3Common = "1.11.0"
 appcompat = "1.8.0"
+media3Session = "1.11.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.19.0" }
@@ -32,6 +33,7 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3Ui" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3Common" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3Session" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
