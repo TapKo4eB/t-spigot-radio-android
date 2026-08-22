@@ -88,7 +88,7 @@ fun PlayerScreen(
     controller: MediaController?,
     modifier: Modifier = Modifier
 ) {
-    var isPlaying by remember { mutableStateOf(controller?.isPlaying == true) }
+    var userWantsPlaying by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("t spigot radio") }
     var artist by remember { mutableStateOf("only real music") }
 
@@ -96,24 +96,25 @@ fun PlayerScreen(
         if (controller == null) {
             onDispose { }
         } else {
-            isPlaying = controller.isPlaying
             title = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
             artist = controller.mediaMetadata.artist?.toString() ?: "only real music"
 
             val listener = object : Player.Listener {
-                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
-                    isPlaying = isPlayingNow
-                }
-
                 override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                     title = mediaMetadata.title?.toString() ?: "t spigot radio"
                     artist = mediaMetadata.artist?.toString() ?: "only real music"
                 }
 
+                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                    // don't change userWantsPlaying here
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        isPlaying = false
-                    }
+                    // don't set userWantsPlaying = false on network loss
+                }
+
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    // keep showing Pause if user started playback
                 }
             }
 
@@ -144,14 +145,20 @@ fun PlayerScreen(
                 enabled = controller != null,
                 onClick = {
                     controller?.let {
-                        if (it.isPlaying) it.pause() else it.play()
+                        if (userWantsPlaying) {
+                            it.pause()
+                            userWantsPlaying = false
+                        } else {
+                            it.play()
+                            userWantsPlaying = true
+                        }
                     }
                 }
             ) {
                 Text(
                     text = when {
                         controller == null -> "Connecting..."
-                        isPlaying -> "Pause"
+                        userWantsPlaying -> "Pause"
                         else -> "Play"
                     }
                 )
