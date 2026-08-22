@@ -1,6 +1,7 @@
 package net.tspigot.radio
 
 import android.content.ComponentName
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -32,6 +34,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import androidx.media3.common.PlaybackException
 
 class MainActivity : ComponentActivity() {
 
@@ -83,14 +88,25 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Helper function to check if device has internet connectivity
+private fun hasNetworkConnectivity(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val activeNetwork = cm.activeNetwork ?: return false
+    val caps = cm.getNetworkCapabilities(activeNetwork) ?: return false
+    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
 @Composable
 fun PlayerScreen(
     controller: MediaController?,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     var userWantsPlaying by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("t spigot radio") }
     var artist by remember { mutableStateOf("only real music") }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(controller) {
         if (controller == null) {
@@ -106,15 +122,26 @@ fun PlayerScreen(
                 }
 
                 override fun onIsPlayingChanged(isPlayingNow: Boolean) {
-                    // don't change userWantsPlaying here
+                    if (isPlayingNow) {
+                        statusMessage = null
+                    } else if (userWantsPlaying) {
+                        val hasNetwork = hasNetworkConnectivity(context)
+                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
+                    }
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    // don't set userWantsPlaying = false on network loss
+                    if (playbackState == Player.STATE_BUFFERING && userWantsPlaying) {
+                        val hasNetwork = hasNetworkConnectivity(context)
+                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
+                    }
                 }
 
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    // keep showing Pause if user started playback
+                override fun onPlayerError(error: PlaybackException) {
+                    if (userWantsPlaying) {
+                        val hasNetwork = hasNetworkConnectivity(context)
+                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
+                    }
                 }
             }
 
@@ -148,7 +175,9 @@ fun PlayerScreen(
                         if (userWantsPlaying) {
                             it.pause()
                             userWantsPlaying = false
+                            statusMessage = null
                         } else {
+                            statusMessage = null
                             it.play()
                             userWantsPlaying = true
                         }
@@ -162,6 +191,11 @@ fun PlayerScreen(
                         else -> "Play"
                     }
                 )
+            }
+
+            if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = statusMessage!!)
             }
         }
     }
