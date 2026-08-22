@@ -104,21 +104,39 @@ fun PlayerScreen(
     val context = LocalContext.current
 
     var userWantsPlaying by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf("t spigot radio") }
-    var artist by remember { mutableStateOf("only real music") }
+    var track1Title by remember { mutableStateOf("t spigot radio") }
+    var track1Artist by remember { mutableStateOf("only real music") }
+    var track2Title by remember { mutableStateOf<String?>(null) }
+    var track2Artist by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(controller) {
         if (controller == null) {
             onDispose { }
         } else {
-            title = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
-            artist = controller.mediaMetadata.artist?.toString() ?: "only real music"
+            track1Title = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
+            track1Artist = controller.mediaMetadata.artist?.toString() ?: "only real music"
 
             val listener = object : Player.Listener {
                 override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
-                    title = mediaMetadata.title?.toString() ?: "t spigot radio"
-                    artist = mediaMetadata.artist?.toString() ?: "only real music"
+                    track1Title = mediaMetadata.title?.toString() ?: "t spigot radio"
+                    track1Artist = mediaMetadata.artist?.toString() ?: "only real music"
+
+                    // Get additional metadata about second track if available
+                    val description = mediaMetadata.description?.toString() ?: ""
+                    if (description.startsWith("DUAL:")) {
+                        val parts = description.substring(5).split("|")
+                        if (parts.size == 2) {
+                            track2Title = parts[0]
+                            track2Artist = parts[1]
+                        } else {
+                            track2Title = null
+                            track2Artist = null
+                        }
+                    } else {
+                        track2Title = null
+                        track2Artist = null
+                    }
                 }
 
                 override fun onIsPlayingChanged(isPlayingNow: Boolean) {
@@ -161,9 +179,28 @@ fun PlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val artistLine = if (artist.isBlank()) "" else "\nby $artist"
+            // Build the now playing text
+            val track1Line = buildString {
+                append(track1Title)
+                if (track1Artist.isNotBlank()) {
+                    append("\nby $track1Artist")
+                }
+            }
 
-            Text(text = "$title$artistLine")
+            val fullText = if (track2Title != null && track2Title!!.isNotBlank()) {
+                buildString {
+                    append(track1Line)
+                    append("\nwith")
+                    append("\n$track2Title")
+                    if (!track2Artist.isNullOrBlank()) {
+                        append("\nby $track2Artist")
+                    }
+                }
+            } else {
+                track1Line
+            }
+
+            Text(text = fullText)
 
             Spacer(modifier = Modifier.height(16.dp))
 

@@ -72,9 +72,9 @@ class PlaybackService : MediaSessionService() {
 
         trackJob = CoroutineScope(Dispatchers.Main.immediate).launch {
             while (isActive) {
-                val track = fetchCurrentTrack()
-                if (track != null) {
-                    updateMetadata(track)
+                val response = fetchCurrentTracks()
+                if (response.tracks.isNotEmpty()) {
+                    updateMetadata(response)
                 }
                 delay(10_000L)
             }
@@ -85,15 +85,32 @@ class PlaybackService : MediaSessionService() {
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
 
-    private fun updateMetadata(track: NowPlaying) {
+    private fun updateMetadata(response: NowPlayingResponse) {
         val player = player ?: return
         val currentItem = player.currentMediaItem ?: return
+
+        val tracks = response.tracks
+        val firstTrack = tracks.getOrNull(0) ?: return
+
+        val title = firstTrack.title ?: "Unknown track"
+        val artist = firstTrack.artist ?: "Unknown artist"
+
+        // If there's a second track, encode it in the description field
+        val description = if (tracks.size >= 2) {
+            val secondTrack = tracks[1]
+            val secondTitle = secondTrack.title ?: "Unknown track"
+            val secondArtist = secondTrack.artist ?: "Unknown artist"
+            "DUAL:$secondTitle|$secondArtist"
+        } else {
+            ""
+        }
 
         val updatedItem = currentItem.buildUpon()
             .setMediaMetadata(
                 currentItem.mediaMetadata.buildUpon()
-                    .setTitle(track.title)
-                    .setArtist(track.artist)
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setDescription(description)
                     .build()
             )
             .build()
@@ -101,7 +118,7 @@ class PlaybackService : MediaSessionService() {
         player.replaceMediaItem(0, updatedItem)
     }
 
-    private suspend fun fetchCurrentTrack(): NowPlaying? = withContext(Dispatchers.IO) {
+    private suspend fun fetchCurrentTracks(): NowPlayingResponse = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
 
         try {
@@ -112,21 +129,29 @@ class PlaybackService : MediaSessionService() {
             connection.connectTimeout = 5_000
             connection.readTimeout = 5_000
 
-            if (connection.responseCode !in 200..299) return@withContext null
+            if (connection.responseCode !in 200..299) return@withContext NowPlayingResponse()
 
             val response = connection.inputStream.bufferedReader().use { it.readText() }
-            val tracks = JSONArray(response)
+            val jsonArray = JSONArray(response)
 
-            if (tracks.length() == 0) return@withContext null
+            if (jsonArray.length() == 0) return@withContext NowPlayingResponse()
 
-            val firstTrack = tracks.getJSONObject(0)
+            val tracks = mutableListOf<NowPlaying>()
 
-            NowPlaying(
-                title = firstTrack.optString("title", "Unknown track"),
-                artist = firstTrack.optString("artist", "Unknown artist")
-            )
+            // Get up to 2 tracks
+            for (i in 0 until minOf(2, jsonArray.length())) {
+                val trackJson = jsonArray.getJSONObject(i)
+                tracks.add(
+                    NowPlaying(
+                        title = trackJson.optString("title", "Unknown track"),
+                        artist = trackJson.optString("artist", "Unknown artist")
+                    )
+                )
+            }
+
+            NowPlayingResponse(tracks = tracks)
         } catch (e: Exception) {
-            null
+            NowPlayingResponse()
         } finally {
             connection?.disconnect()
         }
