@@ -133,7 +133,9 @@ fun PlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = "$title\nby $artist")
+            val artistLine = if (artist.isBlank()) "" else "\nby $artist"
+
+            Text(text = "$title$artistLine")
 
             Spacer(modifier = Modifier.height(16.dp))
 
