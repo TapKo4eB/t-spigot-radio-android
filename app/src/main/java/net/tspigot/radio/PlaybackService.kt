@@ -46,8 +46,8 @@ class PlaybackService : MediaSessionService() {
             .setMediaId("station_1")
             .setMediaMetadata(
                 MediaMetadata.Builder()
-                    .setTitle("My Radio Station")
-                    .setArtist("Live Radio")
+                    .setTitle("t spigot radio")
+                    .setArtist("only real music")
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .build()
