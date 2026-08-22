@@ -1,6 +1,5 @@
 package net.tspigot.radio
 
-import NowPlaying
 import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity

@@ -1,3 +1,5 @@
+package net.tspigot.radio
+
 data class Axis(
     val id: Int? = null,
     val yin: String? = null,

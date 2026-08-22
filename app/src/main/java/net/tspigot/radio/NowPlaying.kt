@@ -1,3 +1,5 @@
+package net.tspigot.radio
+
 data class NowPlaying(
     val id: Int? = null,
     val album: String? = null,

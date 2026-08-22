@@ -1,6 +1,5 @@
 package net.tspigot.radio
 
-import NowPlaying
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
