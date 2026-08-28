@@ -36,8 +36,20 @@ import com.google.common.util.concurrent.ListenableFuture
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.media3.common.PlaybackException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.time.Duration.Companion.seconds
 
 class MainActivity : ComponentActivity() {
 
@@ -97,6 +109,26 @@ private fun hasNetworkConnectivity(context: Context): Boolean {
     return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
 
+private suspend fun fetchSlogan(): String = withContext(Dispatchers.IO) {
+    val connection = URL("https://radio.tspigot.net/api/slogan").openConnection() as HttpURLConnection
+    try {
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "text/plain, application/json")
+
+        val response = connection.inputStream.bufferedReader().use { it.readText().trim() }
+        if (response.isBlank()) return@withContext ""
+
+        return@withContext response
+
+    } catch (_: Exception) {
+        ""
+    } finally {
+        connection.disconnect()
+    }
+}
+
 @Composable
 fun PlayerScreen(
     controller: MediaController?,
@@ -111,9 +143,27 @@ fun PlayerScreen(
     var track2Artist by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
+    var sloganText by remember { mutableStateOf("") }
+    val sloganAlpha = remember { Animatable(0f) }
+
     // Fixes incorrect button behavior after hide and start
     LaunchedEffect(controller) {
         userWantsPlaying = controller?.isPlaying == true
+    }
+
+    LaunchedEffect(Unit) {
+        sloganText = ""
+        sloganAlpha.snapTo(0f)
+
+        while (isActive) {
+            val newSlogan = fetchSlogan()
+
+            sloganAlpha.animateTo(0f, animationSpec = tween(durationMillis = 3500))
+            sloganText = newSlogan
+            sloganAlpha.animateTo(1f, animationSpec = tween(durationMillis = 3500))
+
+            delay(90.seconds)
+        }
     }
 
     DisposableEffect(controller) {
@@ -128,7 +178,6 @@ fun PlayerScreen(
                     track1Title = mediaMetadata.title?.toString() ?: "t spigot radio"
                     track1Artist = mediaMetadata.artist?.toString() ?: "only real music"
 
-                    // Get additional metadata about second track if available
                     val description = mediaMetadata.description?.toString() ?: ""
                     if (description.startsWith("DUAL:")) {
                         val parts = description.substring(5).split("|")
@@ -178,14 +227,24 @@ fun PlayerScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize()
     ) {
+        Text(
+            text = sloganText,
+            color = Color(0xFF888844),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 40.dp)
+                .padding(horizontal = 16.dp)
+                .then(Modifier)
+                .graphicsLayer(alpha = sloganAlpha.value)
+        )
+
         Column(
+            modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Build the now playing text
             val track1Line = buildString {
                 append(track1Title)
                 if (track1Artist.isNotBlank()) {

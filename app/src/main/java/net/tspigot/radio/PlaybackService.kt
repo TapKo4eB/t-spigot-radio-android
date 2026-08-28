@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.time.Duration.Companion.seconds
 
 class PlaybackService : MediaSessionService() {
 
@@ -76,7 +77,7 @@ class PlaybackService : MediaSessionService() {
                 if (response.tracks.isNotEmpty()) {
                     updateMetadata(response)
                 }
-                delay(10_000L)
+                delay(10.seconds)
             }
         }
     }
