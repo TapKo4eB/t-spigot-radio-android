@@ -36,6 +36,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.runtime.LaunchedEffect
 import androidx.media3.common.PlaybackException
 
 class MainActivity : ComponentActivity() {
@@ -109,6 +110,11 @@ fun PlayerScreen(
     var track2Title by remember { mutableStateOf<String?>(null) }
     var track2Artist by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    // Fixes incorrect button behavior after hide and start
+    LaunchedEffect(controller) {
+        userWantsPlaying = controller?.isPlaying == true
+    }
 
     DisposableEffect(controller) {
         if (controller == null) {
