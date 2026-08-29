@@ -162,7 +162,7 @@ class PlaybackService : MediaSessionService() {
             }
 
             NowPlayingResponse(tracks = tracks)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             NowPlayingResponse()
         } finally {
             connection?.disconnect()
