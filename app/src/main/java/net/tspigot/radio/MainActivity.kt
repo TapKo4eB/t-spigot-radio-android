@@ -129,6 +129,20 @@ private suspend fun fetchSlogan(): String = withContext(Dispatchers.IO) {
     }
 }
 
+// Parses the "MULTI:title|artist;;title|artist" encoding produced by PlaybackService
+// into a list of (title, artist) pairs for every OTHER track.
+private fun parseOtherTracks(description: String): List<Pair<String, String>> {
+    if (!description.startsWith("MULTI:")) return emptyList()
+
+    return description.substring(6)
+        .split(";;")
+        .filter { it.isNotBlank() }
+        .mapNotNull { entry ->
+            val parts = entry.split("|")
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }
+}
+
 @Composable
 fun PlayerScreen(
     controller: MediaController?,
@@ -137,10 +151,9 @@ fun PlayerScreen(
     val context = LocalContext.current
 
     var userWantsPlaying by remember { mutableStateOf(false) }
-    var track1Title by remember { mutableStateOf("t spigot radio") }
-    var track1Artist by remember { mutableStateOf("only real music") }
-    var track2Title by remember { mutableStateOf<String?>(null) }
-    var track2Artist by remember { mutableStateOf<String?>(null) }
+    var mainTitle by remember { mutableStateOf("t spigot radio") }
+    var mainArtist by remember { mutableStateOf("only real music") }
+    var otherTracks by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     var sloganText by remember { mutableStateOf("") }
@@ -170,28 +183,15 @@ fun PlayerScreen(
         if (controller == null) {
             onDispose { }
         } else {
-            track1Title = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
-            track1Artist = controller.mediaMetadata.artist?.toString() ?: "only real music"
+            mainTitle = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
+            mainArtist = controller.mediaMetadata.artist?.toString() ?: "only real music"
+            otherTracks = parseOtherTracks(controller.mediaMetadata.description?.toString() ?: "")
 
             val listener = object : Player.Listener {
                 override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
-                    track1Title = mediaMetadata.title?.toString() ?: "t spigot radio"
-                    track1Artist = mediaMetadata.artist?.toString() ?: "only real music"
-
-                    val description = mediaMetadata.description?.toString() ?: ""
-                    if (description.startsWith("DUAL:")) {
-                        val parts = description.substring(5).split("|")
-                        if (parts.size == 2) {
-                            track2Title = parts[0]
-                            track2Artist = parts[1]
-                        } else {
-                            track2Title = null
-                            track2Artist = null
-                        }
-                    } else {
-                        track2Title = null
-                        track2Artist = null
-                    }
+                    mainTitle = mediaMetadata.title?.toString() ?: "t spigot radio"
+                    mainArtist = mediaMetadata.artist?.toString() ?: "only real music"
+                    otherTracks = parseOtherTracks(mediaMetadata.description?.toString() ?: "")
                 }
 
                 override fun onIsPlayingChanged(isPlayingNow: Boolean) {
@@ -245,24 +245,21 @@ fun PlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val track1Line = buildString {
-                append(track1Title)
-                if (track1Artist.isNotBlank()) {
-                    append("\nby $track1Artist")
+            val fullText = buildString {
+                append(mainTitle)
+                if (mainArtist.isNotBlank()) {
+                    append("\nby $mainArtist")
                 }
-            }
 
-            val fullText = if (track2Title != null && track2Title!!.isNotBlank()) {
-                buildString {
-                    append(track1Line)
+                if (otherTracks.isNotEmpty()) {
                     append("\nwith")
-                    append("\n$track2Title")
-                    if (!track2Artist.isNullOrBlank()) {
-                        append("\nby $track2Artist")
+                    otherTracks.forEach { (otherTitle, otherArtist) ->
+                        append("\n$otherTitle")
+                        if (otherArtist.isNotBlank()) {
+                            append("\nby $otherArtist")
+                        }
                     }
                 }
-            } else {
-                track1Line
             }
 
             Text(text = fullText)

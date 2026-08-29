@@ -27,6 +27,11 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var trackJob: Job? = null
 
+    companion object {
+        private val MAIN_TYPES = setOf("FULL_TRACK", "AMBIENCE", "BED", "COMMERCIAL", "BUMP")
+        private val OTHER_TYPES = setOf("VOICE", "ENV", "RHYTHM")
+    }
+
     override fun onCreate() {
         super.onCreate()
 
@@ -90,18 +95,23 @@ class PlaybackService : MediaSessionService() {
         val player = player ?: return
         val currentItem = player.currentMediaItem ?: return
 
-        val tracks = response.tracks
-        val firstTrack = tracks.getOrNull(0) ?: return
+        // Only the first MAIN track is ever shown, per spec.
+        val mainTrack = response.tracks.firstOrNull { it.type in MAIN_TYPES } ?: return
 
-        val title = firstTrack.title ?: "Unknown track"
-        val artist = firstTrack.artist ?: "Unknown artist"
+        // Every OTHER track is shown, in order, after the main track.
+        val otherTracks = response.tracks.filter { it.type in OTHER_TYPES }
 
-        // If there's a second track, encode it in the description field
-        val description = if (tracks.size >= 2) {
-            val secondTrack = tracks[1]
-            val secondTitle = secondTrack.title ?: "Unknown track"
-            val secondArtist = secondTrack.artist ?: "Unknown artist"
-            "DUAL:$secondTitle|$secondArtist"
+        val title = mainTrack.title ?: "Unknown track"
+        val artist = mainTrack.artist ?: "Unknown artist"
+
+        // Encode all OTHER tracks into the description field so the UI can
+        // reconstruct the full "with X, with Y, ..." list.
+        val description = if (otherTracks.isNotEmpty()) {
+            "MULTI:" + otherTracks.joinToString(";;") { track ->
+                val otherTitle = track.title ?: "Unknown track"
+                val otherArtist = track.artist ?: "Unknown artist"
+                "$otherTitle|$otherArtist"
+            }
         } else {
             ""
         }
@@ -139,13 +149,14 @@ class PlaybackService : MediaSessionService() {
 
             val tracks = mutableListOf<NowPlaying>()
 
-            // Get up to 2 tracks
-            for (i in 0 until minOf(2, jsonArray.length())) {
+            // The API can return any number of tracks now, so read all of them.
+            for (i in 0 until jsonArray.length()) {
                 val trackJson = jsonArray.getJSONObject(i)
                 tracks.add(
                     NowPlaying(
                         title = trackJson.optString("title", "Unknown track"),
-                        artist = trackJson.optString("artist", "Unknown artist")
+                        artist = trackJson.optString("artist", "Unknown artist"),
+                        type = trackJson.optString("type").takeIf { it.isNotBlank() }
                     )
                 )
             }
