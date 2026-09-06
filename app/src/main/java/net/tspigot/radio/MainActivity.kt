@@ -116,6 +116,7 @@ private suspend fun fetchSlogan(): String = withContext(Dispatchers.IO) {
         connection.readTimeout = 5000
         connection.requestMethod = "GET"
         connection.setRequestProperty("Accept", "text/plain, application/json")
+        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
 
         val response = connection.inputStream.bufferedReader().use { it.readText().trim() }
         if (response.isBlank()) return@withContext ""
