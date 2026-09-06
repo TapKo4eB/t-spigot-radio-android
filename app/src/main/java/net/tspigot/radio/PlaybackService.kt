@@ -6,7 +6,9 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import kotlinx.coroutines.CoroutineScope
@@ -40,7 +42,19 @@ class PlaybackService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+
+        val customUserAgent = AppConfig.userAgent
+
+        // Create HttpDataSource factory with custom user agent
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(customUserAgent)
+
+        // Create MediaSourceFactory with custom HttpDataSource
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(httpDataSourceFactory)
+
         player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -139,6 +153,11 @@ class PlaybackService : MediaSessionService() {
             connection.requestMethod = "GET"
             connection.connectTimeout = 5_000
             connection.readTimeout = 5_000
+
+            connection.setRequestProperty(
+                "User-Agent",
+                AppConfig.userAgent
+            )
 
             if (connection.responseCode !in 200..299) return@withContext NowPlayingResponse()
 
