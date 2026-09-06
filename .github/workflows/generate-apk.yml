@@ -2,7 +2,7 @@ name: Generate APK
 
 env:
   # The name of the main module repository
-  main_project_module: net.tspigot.radio
+  main_project_module: app
 
   # The output folder for build results
   build_output_path: buildActionResult
