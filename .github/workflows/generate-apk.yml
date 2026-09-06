@@ -21,40 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Set Current Date As Env Variable
-      - name: Set current date as env variable
-        run: echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-
-      # Set Repository Name As Env Variable
-      - name: Set repository name as env variable
-        run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
-
-      - name: Set Up JDK
-        uses: actions/setup-java@v6
+      - uses: sparkfabrik/android-build-action@v1.5.0
         with:
-          distribution: 'oracle'
-          java-version: 'latest'
-          cache: 'gradle'
-
-      - name: Change wrapper permissions
-        run: chmod +x ./gradlew
-
-      # Run Tests Build
-      - name: Run gradle tests
-        run: ./gradlew test
-
-      # Run Build Project
-      - name: Build gradle project
-        run: ./gradlew build
-
-      # Create APK Release
-      - name: Build apk release project (APK) - ${{ env.main_project_module }} module
-        run: ./gradlew assemble
-
-      # Upload Artifact Build
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: tspigotradio.apk
-          path: ${{ env.main_project_module }}/build/outputs/apk/release/app-release-unsigned.apk
-          archive: false
+          project-path: app
+          output-path: tspigotradio.apk
