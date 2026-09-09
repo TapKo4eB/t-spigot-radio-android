@@ -1,5 +1,6 @@
 package net.tspigot.radio.playerwindow
 
+import android.util.Log
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -117,6 +118,36 @@ private fun parseChatMessage(obj: JSONObject): ChatMessage? {
     }
 }
 
+private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
+    val result = ArrayList<ChatMessage>(historyArray.length())
+
+    for (i in 0 until historyArray.length()) {
+        try {
+            // optJSONObject returns null instead of throwing if the
+            // element isn't a JSON object (e.g. null, a string, a number).
+            val item = historyArray.optJSONObject(i)
+            if (item == null) {
+                Log.w("ChatPanel", "history[$i] is not a JSON object, skipping")
+                continue
+            }
+
+            val msg = parseChatMessage(item)
+            if (msg == null) {
+                Log.w("ChatPanel", "history[$i] failed to parse (unknown type or bad fields), skipping")
+                continue
+            }
+
+            result.add(msg)
+        } catch (e: Exception) {
+            // Belt-and-braces: catch anything unexpected per-item so the
+            // loop itself can never abort partway through.
+            Log.w("ChatPanel", "history[$i] threw while parsing, skipping", e)
+        }
+    }
+
+    return result
+}
+
 private data class OutgoingPayload(
     val json: String
 )
@@ -182,9 +213,6 @@ fun ChatPanel(
         }
     }
 
-    // Whether new messages should auto-scroll the list. Only a manual drag
-    // away from the bottom turns this off; it turns back on once the user
-    // (or an autoscroll) returns to the bottom.
     var stickToBottom by remember { mutableStateOf(true) }
 
     LaunchedEffect(listState) {
@@ -201,8 +229,6 @@ fun ChatPanel(
         }
     }
 
-    // Auto-scroll to bottom whenever the messages list size changes, but
-    // only if the user hasn't scrolled away from the bottom.
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty() && stickToBottom) {
             listState.animateScrollToItem(messages.size - 1)
@@ -220,12 +246,11 @@ fun ChatPanel(
                 try {
                     val json = JSONObject(text)
                     if (json.has("history")) {
-                        val historyArray = json.getJSONArray("history")
-                        for (i in 0 until historyArray.length()) {
-                            val item = historyArray.getJSONObject(i)
-                            parseChatMessage(item)?.let { msg ->
-                                messages.add(msg)
-                            }
+                        val historyArray = json.optJSONArray("history")
+                        if (historyArray != null) {
+                            messages.addAll(parseHistoryMessages(historyArray))
+                        } else {
+                            Log.w("ChatPanel", "'history' field present but not an array")
                         }
                     } else {
                         parseChatMessage(json)?.let { msg ->
@@ -237,7 +262,9 @@ fun ChatPanel(
                         messages.removeAt(0)
                     }
                 } catch (_: Exception) {
-                    // Ignore malformed JSON
+                    // Only reachable now for JSON that fails to parse at all
+                    // (e.g. a truncated/corrupted frame), not for per-item issues.
+                    Log.w("ChatPanel", "failed to parse incoming message: ${text.take(200)}")
                 }
             }
 
@@ -342,6 +369,8 @@ fun ChatPanel(
             Button(
                 enabled = connected && input.isNotBlank(),
                 onClick = {
+                    stickToBottom = true
+
                     val text = input.trim()
 
                     if (text.startsWith("/")) {
@@ -372,3 +401,4 @@ fun ChatPanel(
         }
     }
 }
+
