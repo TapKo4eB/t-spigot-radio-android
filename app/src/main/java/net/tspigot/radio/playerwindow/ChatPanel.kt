@@ -148,11 +148,13 @@ private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
     return result
 }
 
-private data class OutgoingPayload(
+// Made internal (was private) so PlayerScreen can build the same
+// "/like" command payload without duplicating the parsing logic.
+internal data class OutgoingPayload(
     val json: String
 )
 
-private fun buildOutgoingPayload(input: String): OutgoingPayload? {
+internal fun buildOutgoingPayload(input: String): OutgoingPayload? {
     val text = input.trim()
     if (text.isEmpty()) return null
 
@@ -188,12 +190,11 @@ private fun buildOutgoingPayload(input: String): OutgoingPayload? {
 
 @Composable
 fun ChatPanel(
+    connectionState: ChatConnectionState,
     modifier: Modifier = Modifier
 ) {
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var input by remember { mutableStateOf("") }
-    var connected by remember { mutableStateOf(false) }
-    var socket by remember { mutableStateOf<WebSocket?>(null) }
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -238,8 +239,8 @@ fun ChatPanel(
     DisposableEffect(Unit) {
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                connected = true
-                socket = webSocket
+                connectionState.connected = true
+                connectionState.socket = webSocket
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -269,25 +270,25 @@ fun ChatPanel(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                connected = false
+                connectionState.connected = false
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                connected = false
-                socket = null
+                connectionState.connected = false
+                connectionState.socket = null
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                connected = false
-                socket = null
+                connectionState.connected = false
+                connectionState.socket = null
             }
         }
 
         val ws = ChatSocketClient.connect(listener)
 
         onDispose {
-            connected = false
-            socket = null
+            connectionState.connected = false
+            connectionState.socket = null
             ws.close(1000, "bye")
         }
     }
@@ -297,7 +298,7 @@ fun ChatPanel(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = if (connected) "Chat" else "Chat (offline)",
+            text = if (connectionState.connected) "Chat" else "Chat (offline)",
             style = MaterialTheme.typography.titleSmall
         )
 
@@ -367,7 +368,7 @@ fun ChatPanel(
             )
 
             Button(
-                enabled = connected && input.isNotBlank(),
+                enabled = connectionState.connected && input.isNotBlank(),
                 onClick = {
                     stickToBottom = true
 
@@ -391,7 +392,7 @@ fun ChatPanel(
 
                     val payload = buildOutgoingPayload(input)
                     if (payload != null) {
-                        socket?.send(payload.json)
+                        connectionState.socket?.send(payload.json)
                         input = ""
                     }
                 }
@@ -401,4 +402,3 @@ fun ChatPanel(
         }
     }
 }
-

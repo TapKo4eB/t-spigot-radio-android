@@ -8,11 +8,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -26,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -34,6 +38,7 @@ import androidx.media3.session.MediaController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.R
 import kotlin.time.Duration.Companion.seconds
 
 private fun hasNetworkConnectivity(context: Context): Boolean {
@@ -90,6 +95,17 @@ fun PlayerScreen(
 
     var sloganText by remember { mutableStateOf("") }
     val sloganAlpha = remember { Animatable(0f) }
+
+    // Shared connection state: ChatPanel owns the socket lifecycle,
+    // but this button also needs to send over it.
+    val chatConnection = remember { ChatConnectionState() }
+    var isFavorited by remember { mutableStateOf(false) }
+
+    // Reset the favorite state whenever the *main* track changes.
+    // otherTracks is intentionally excluded from this key.
+    LaunchedEffect(mainTitle, mainArtist) {
+        isFavorited = false
+    }
 
     LaunchedEffect(controller) {
         userWantsPlaying = controller?.isPlaying == true
@@ -201,30 +217,61 @@ fun PlayerScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Button(
-                    modifier = modifier,
-                    enabled = controller != null,
-                    onClick = {
-                        controller?.let {
-                            if (userWantsPlaying) {
-                                it.pause()
-                                userWantsPlaying = false
-                                statusMessage = null
-                            } else {
-                                statusMessage = null
-                                it.play()
-                                userWantsPlaying = true
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        modifier = modifier,
+                        enabled = controller != null,
+                        onClick = {
+                            controller?.let {
+                                if (userWantsPlaying) {
+                                    it.pause()
+                                    userWantsPlaying = false
+                                    statusMessage = null
+                                } else {
+                                    statusMessage = null
+                                    it.play()
+                                    userWantsPlaying = true
+                                }
                             }
                         }
+                    ) {
+                        Text(
+                            text = when {
+                                controller == null -> "Connecting..."
+                                userWantsPlaying -> "Pause"
+                                else -> "Play"
+                            }
+                        )
                     }
-                ) {
-                    Text(
-                        text = when {
-                            controller == null -> "Connecting..."
-                            userWantsPlaying -> "Pause"
-                            else -> "Play"
+
+                    IconButton(
+                        enabled = chatConnection.connected,
+                        onClick = {
+                            // Always re-send "/like" on every press, even if
+                            // already favorited — the action stays the same.
+                            val payload = buildOutgoingPayload("/like")
+                            val sent = payload != null &&
+                                    chatConnection.socket?.send(payload.json) == true
+
+                            if (sent) {
+                                isFavorited = true
+                            }
                         }
-                    )
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                id = if (isFavorited) {
+                                    R.drawable.favorite_filled
+                                } else {
+                                    R.drawable.favorite
+                                }
+                            ),
+                            contentDescription = if (isFavorited) "Liked" else "Like"
+                        )
+                    }
                 }
 
                 if (statusMessage != null) {
@@ -235,6 +282,7 @@ fun PlayerScreen(
         }
 
         ChatPanel(
+            connectionState = chatConnection,
             modifier = Modifier
                 .padding(horizontal = 12.dp)
                 .padding(bottom = 12.dp)
