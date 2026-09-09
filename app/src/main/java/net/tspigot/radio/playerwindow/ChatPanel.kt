@@ -1,6 +1,7 @@
 package net.tspigot.radio.playerwindow
 
 import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -15,10 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -461,11 +462,17 @@ fun ChatPanel(
                 value = input,
                 onValueChange = { input = it },
                 singleLine = true,
-                label = { Text("Message") }
+                label = { Text("Say something, or /name <username>") }
             )
 
-            Button(
+            IconButton(
                 enabled = connectionState.connected && input.isNotBlank(),
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(10)),
+
                 onClick = {
                     stickToBottom = true
 
@@ -486,7 +493,7 @@ fun ChatPanel(
                                 )
                             )
                             input = ""
-                            return@Button
+                            return@IconButton
                         }
 
                         if (cmd == "name" && argsText.isEmpty()) {
@@ -499,7 +506,7 @@ fun ChatPanel(
                                 )
                             )
                             input = ""
-                            return@Button
+                            return@IconButton
                         }
 
                         if (cmd == "say") {
@@ -523,7 +530,7 @@ fun ChatPanel(
                                 connectionState.socket?.send(sayPayload)
                             }
                             input = ""
-                            return@Button
+                            return@IconButton
                         }
                     }
 
@@ -534,7 +541,11 @@ fun ChatPanel(
                     }
                 }
             ) {
-                Text("Send")
+                Icon(
+                    painter = painterResource(R.drawable.send),
+                    contentDescription = "Send",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
     }
