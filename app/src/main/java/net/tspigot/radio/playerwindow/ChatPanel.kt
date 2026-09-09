@@ -57,7 +57,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
-private val VALID_COMMANDS = setOf("like", "name")
+private val VALID_COMMANDS = setOf("like", "name", "say")
 
 private val TIME_CODE_COLOR = Color(0xFF888888)
 
@@ -177,10 +177,37 @@ private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
     return result
 }
 
+/**
+ * Result of splitting a "/command args..." string into its parts.
+ * Returns null if there's nothing after the leading slash at all
+ * (e.g. input was just "/" or "/   ").
+ */
+internal data class ParsedCommand(
+    val command: String,
+    val argsText: String
+)
+
+internal fun parseSlashCommand(text: String): ParsedCommand? {
+    val withoutSlash = text.removePrefix("/").trim()
+    if (withoutSlash.isEmpty()) return null
+
+    val parts = withoutSlash.split(Regex("\\s+"), limit = 2)
+    val command = parts[0].lowercase()
+    val argsText = parts.getOrNull(1)?.trim().orEmpty()
+
+    return ParsedCommand(command, argsText)
+}
+
 internal data class OutgoingPayload(
     val json: String
 )
 
+/**
+ * Builds the payload for a plain message or a generic "command" type
+ * (e.g. "/like"). Note: "/say" is intentionally NOT handled here -
+ * it's special-cased in the send handler below, since it must be
+ * emitted as a "message" payload rather than a "command" payload.
+ */
 internal fun buildOutgoingPayload(input: String): OutgoingPayload? {
     val text = input.trim()
     if (text.isEmpty()) return null
@@ -194,22 +221,17 @@ internal fun buildOutgoingPayload(input: String): OutgoingPayload? {
         )
     }
 
-    val withoutSlash = text.removePrefix("/").trim()
-    if (withoutSlash.isEmpty()) return null
-
-    val parts = withoutSlash.split(Regex("\\s+"), limit = 2)
-    val command = parts[0].lowercase()
-    val argsText = parts.getOrNull(1)?.trim().orEmpty()
+    val parsed = parseSlashCommand(text) ?: return null
 
     val args = JSONArray()
-    if (argsText.isNotEmpty()) {
-        args.put(argsText)
+    if (parsed.argsText.isNotEmpty()) {
+        args.put(parsed.argsText)
     }
 
     return OutgoingPayload(
         JSONObject()
             .put("type", "command")
-            .put("command", command)
+            .put("command", parsed.command)
             .put("args", args)
             .toString()
     )
@@ -450,8 +472,11 @@ fun ChatPanel(
                     val text = input.trim()
 
                     if (text.startsWith("/")) {
-                        val cmd = text.removePrefix("/").trim().split(Regex("\\s+"))[0].lowercase()
-                        if (cmd !in VALID_COMMANDS) {
+                        val parsed = parseSlashCommand(text)
+                        val cmd = parsed?.command.orEmpty()
+                        val argsText = parsed?.argsText.orEmpty()
+
+                        if (parsed == null || cmd !in VALID_COMMANDS) {
                             messages.add(
                                 ChatMessage(
                                     id = "local_${System.currentTimeMillis()}",
@@ -460,6 +485,43 @@ fun ChatPanel(
                                     timestamp = Instant.now().epochSecond
                                 )
                             )
+                            input = ""
+                            return@Button
+                        }
+
+                        if (cmd == "name" && argsText.isEmpty()) {
+                            messages.add(
+                                ChatMessage(
+                                    id = "local_${System.currentTimeMillis()}",
+                                    kind = ChatMessageKind.System,
+                                    text = "Usage: /name <username>",
+                                    timestamp = Instant.now().epochSecond
+                                )
+                            )
+                            input = ""
+                            return@Button
+                        }
+
+                        if (cmd == "say") {
+                            // /say is handled entirely client-side: its
+                            // argument is sent as a plain "message" payload,
+                            // never wrapped as a "command".
+                            if (argsText.isEmpty()) {
+                                messages.add(
+                                    ChatMessage(
+                                        id = "local_${System.currentTimeMillis()}",
+                                        kind = ChatMessageKind.System,
+                                        text = "Usage: /say <message>",
+                                        timestamp = Instant.now().epochSecond
+                                    )
+                                )
+                            } else {
+                                val sayPayload = JSONObject()
+                                    .put("type", "message")
+                                    .put("text", argsText)
+                                    .toString()
+                                connectionState.socket?.send(sayPayload)
+                            }
                             input = ""
                             return@Button
                         }
