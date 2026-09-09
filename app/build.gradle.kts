@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "net.tspigot.radio"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 37
         versionCode = 4
         versionName = "0.0.3"

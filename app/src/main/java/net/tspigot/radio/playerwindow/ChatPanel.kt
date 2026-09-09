@@ -37,7 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.tspigot.radio.AppConfig
@@ -49,9 +52,16 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 private val VALID_COMMANDS = setOf("like", "name")
+
+private val TIME_CODE_COLOR = Color(0xFF888888)
+
+private val timeCodeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 enum class ChatMessageKind {
     Normal,
@@ -65,6 +75,24 @@ data class ChatMessage(
     val text: String,
     val timestamp: Long
 )
+
+/**
+ * Formats a "timestamp" field (epoch seconds, e.g. `1788954990`) into a
+ * local-time "HH:mm" string. Falls back to "--:--" if the timestamp is
+ * missing/invalid (0 or negative) so a malformed message never crashes
+ * the row.
+ */
+private fun formatTimeCode(timestampSeconds: Long): String {
+    if (timestampSeconds <= 0L) return "--:--"
+
+    return try {
+        Instant.ofEpochSecond(timestampSeconds)
+            .atZone(ZoneId.systemDefault())
+            .format(timeCodeFormatter)
+    } catch (_: Exception) {
+        "--:--"
+    }
+}
 
 private object ChatSocketClient {
     private val client = OkHttpClient.Builder()
@@ -326,11 +354,20 @@ fun ChatPanel(
                         ChatMessageKind.System -> Color(0xff99AAAA)
                     }
 
+                    val displayText = buildAnnotatedString {
+                        withStyle(SpanStyle(color = TIME_CODE_COLOR)) {
+                            append(formatTimeCode(msg.timestamp))
+                        }
+                        append(" ")
+                        withStyle(SpanStyle(color = messageColor)) {
+                            append(msg.text)
+                        }
+                    }
+
                     Text(
-                        text = msg.text,
+                        text = displayText,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = messageColor,
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(4.dp))
