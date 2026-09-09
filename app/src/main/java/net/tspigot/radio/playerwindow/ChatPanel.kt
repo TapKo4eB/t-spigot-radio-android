@@ -1,32 +1,43 @@
 package net.tspigot.radio.playerwindow
 
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.R
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -154,10 +165,46 @@ fun ChatPanel(
     var socket by remember { mutableStateOf<WebSocket?>(null) }
 
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-    // Auto-scroll to bottom whenever the messages list size changes
+    // True while the list is scrolled all the way to the last item.
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (layoutInfo.totalItemsCount == 0 || visibleItems.isEmpty()) {
+                true
+            } else {
+                val lastVisible = visibleItems.last()
+                lastVisible.index == layoutInfo.totalItemsCount - 1 &&
+                        (lastVisible.offset + lastVisible.size) <= layoutInfo.viewportEndOffset
+            }
+        }
+    }
+
+    // Whether new messages should auto-scroll the list. Only a manual drag
+    // away from the bottom turns this off; it turns back on once the user
+    // (or an autoscroll) returns to the bottom.
+    var stickToBottom by remember { mutableStateOf(true) }
+
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start && !isAtBottom) {
+                stickToBottom = false
+            }
+        }
+    }
+
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom) {
+            stickToBottom = true
+        }
+    }
+
+    // Auto-scroll to bottom whenever the messages list size changes, but
+    // only if the user hasn't scrolled away from the bottom.
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.isNotEmpty() && stickToBottom) {
             listState.animateScrollToItem(messages.size - 1)
         }
     }
@@ -186,7 +233,7 @@ fun ChatPanel(
                         }
                     }
 
-                    while (messages.size > 500) {
+                    while (messages.size > 1000) {
                         messages.removeAt(0)
                     }
                 } catch (_: Exception) {
@@ -229,27 +276,52 @@ fun ChatPanel(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp),
-            state = listState
+                .height(180.dp)
         ) {
-            items(messages, key = { it.id }) { msg ->
-                val messageColor = when (msg.kind) {
-                    ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
-                    ChatMessageKind.Like -> Color(0xFF88ff88)
-                    ChatMessageKind.System -> Color(0xff99AAAA)
-                }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                state = listState
+            ) {
+                items(messages, key = { it.id }) { msg ->
+                    val messageColor = when (msg.kind) {
+                        ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
+                        ChatMessageKind.Like -> Color(0xFF88ff88)
+                        ChatMessageKind.System -> Color(0xff99AAAA)
+                    }
 
-                Text(
-                    text = msg.text,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = messageColor,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = msg.text,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = messageColor,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+
+            if (!isAtBottom) {
+                FloatingActionButton(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                    onClick = {
+                        stickToBottom = true
+                        coroutineScope.launch {
+                            if (messages.isNotEmpty()) {
+                                listState.animateScrollToItem(messages.size - 1)
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.arrow_down),
+                        contentDescription = "Scroll to bottom"
+                    )
+                }
             }
         }
 
