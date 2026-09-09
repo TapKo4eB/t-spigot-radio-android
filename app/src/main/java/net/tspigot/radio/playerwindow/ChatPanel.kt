@@ -1,6 +1,7 @@
 package net.tspigot.radio.playerwindow
 
 import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,12 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -123,8 +126,6 @@ private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
 
     for (i in 0 until historyArray.length()) {
         try {
-            // optJSONObject returns null instead of throwing if the
-            // element isn't a JSON object (e.g. null, a string, a number).
             val item = historyArray.optJSONObject(i)
             if (item == null) {
                 Log.w("ChatPanel", "history[$i] is not a JSON object, skipping")
@@ -148,8 +149,6 @@ private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
     return result
 }
 
-// Made internal (was private) so PlayerScreen can build the same
-// "/like" command payload without duplicating the parsing logic.
 internal data class OutgoingPayload(
     val json: String
 )
@@ -215,6 +214,7 @@ fun ChatPanel(
     }
 
     var stickToBottom by remember { mutableStateOf(true) }
+    var newMessageCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { interaction ->
@@ -227,6 +227,7 @@ fun ChatPanel(
     LaunchedEffect(isAtBottom) {
         if (isAtBottom) {
             stickToBottom = true
+            newMessageCount = 0
         }
     }
 
@@ -246,6 +247,8 @@ fun ChatPanel(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val json = JSONObject(text)
+                    val sizeBefore = messages.size
+
                     if (json.has("history")) {
                         val historyArray = json.optJSONArray("history")
                         if (historyArray != null) {
@@ -259,12 +262,15 @@ fun ChatPanel(
                         }
                     }
 
+                    val addedCount = messages.size - sizeBefore
+                    if (addedCount > 0 && !stickToBottom) {
+                        newMessageCount += addedCount
+                    }
+
                     while (messages.size > 1000) {
                         messages.removeAt(0)
                     }
                 } catch (_: Exception) {
-                    // Only reachable now for JSON that fails to parse at all
-                    // (e.g. a truncated/corrupted frame), not for per-item issues.
                     Log.w("ChatPanel", "failed to parse incoming message: ${text.take(200)}")
                 }
             }
@@ -331,6 +337,37 @@ fun ChatPanel(
                 }
             }
 
+            if (newMessageCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                        .clickable {
+                            newMessageCount = 0
+                            stickToBottom = true
+                            coroutineScope.launch {
+                                if (messages.isNotEmpty()) {
+                                    listState.animateScrollToItem(messages.size - 1)
+                                }
+                            }
+                        },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary,
+                    tonalElevation = 4.dp
+                ) {
+                    Text(
+                        text = if (newMessageCount == 1) {
+                            "1 new message"
+                        } else {
+                            "$newMessageCount new messages"
+                        },
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
             if (!isAtBottom) {
                 FloatingActionButton(
                     modifier = Modifier
@@ -338,6 +375,7 @@ fun ChatPanel(
                         .padding(8.dp),
                     onClick = {
                         stickToBottom = true
+                        newMessageCount = 0
                         coroutineScope.launch {
                             if (messages.isNotEmpty()) {
                                 listState.animateScrollToItem(messages.size - 1)
