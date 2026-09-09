@@ -34,6 +34,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+private val VALID_COMMANDS = setOf("like", "name")
+
 enum class ChatMessageKind {
     Normal,
     Like,
@@ -241,6 +243,25 @@ fun ChatPanel(
             Button(
                 enabled = connected && input.isNotBlank(),
                 onClick = {
+                    val text = input.trim()
+
+                    // Check if it's a command and if that command is unknown
+                    if (text.startsWith("/")) {
+                        val cmd = text.removePrefix("/").trim().split(Regex("\\s+"))[0].lowercase()
+                        if (cmd !in VALID_COMMANDS) {
+                            messages.add(
+                                ChatMessage(
+                                    id = "local_${System.currentTimeMillis()}",
+                                    kind = ChatMessageKind.System,
+                                    text = "Unknown command: /$cmd",
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                            input = ""
+                            return@Button
+                        }
+                    }
+
                     val payload = buildOutgoingPayload(input)
                     if (payload != null) {
                         socket?.send(payload.json)
