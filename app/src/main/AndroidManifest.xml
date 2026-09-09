@@ -17,7 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TSpigotRadio">
         <activity
-            android:name=".MainActivity"
+            android:name=".playerwindow.MainActivity"
             android:launchMode="singleTop"
             android:exported="true"
             android:theme="@style/Theme.TSpigotRadio"
