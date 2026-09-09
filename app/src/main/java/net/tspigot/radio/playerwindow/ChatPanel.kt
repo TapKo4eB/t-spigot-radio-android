@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -151,6 +153,15 @@ fun ChatPanel(
     var connected by remember { mutableStateOf(false) }
     var socket by remember { mutableStateOf<WebSocket?>(null) }
 
+    val listState = rememberLazyListState()
+
+    // Auto-scroll to bottom whenever the messages list size changes
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
     DisposableEffect(Unit) {
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -221,7 +232,8 @@ fun ChatPanel(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
+                .height(180.dp),
+            state = listState
         ) {
             items(messages, key = { it.id }) { msg ->
                 val messageColor = when (msg.kind) {
