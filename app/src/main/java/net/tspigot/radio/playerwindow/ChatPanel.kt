@@ -24,11 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import net.tspigot.radio.AppConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -53,6 +55,7 @@ private object ChatSocketClient {
     fun connect(listener: WebSocketListener): WebSocket {
         val request = Request.Builder()
             .url("wss://radio.tspigot.net/chat")
+            .header("User-Agent", AppConfig.userAgent)
             .build()
 
         return client.newWebSocket(request, listener)
@@ -98,6 +101,44 @@ private fun parseChatMessage(json: String): ChatMessage? {
     } catch (_: Exception) {
         null
     }
+}
+
+private data class OutgoingPayload(
+    val json: String
+)
+
+private fun buildOutgoingPayload(input: String): OutgoingPayload? {
+    val text = input.trim()
+    if (text.isEmpty()) return null
+
+    if (!text.startsWith("/")) {
+        return OutgoingPayload(
+            JSONObject()
+                .put("type", "message")
+                .put("text", text)
+                .toString()
+        )
+    }
+
+    val withoutSlash = text.removePrefix("/").trim()
+    if (withoutSlash.isEmpty()) return null
+
+    val parts = withoutSlash.split(Regex("\\s+"), limit = 2)
+    val command = parts[0].lowercase()
+    val argsText = parts.getOrNull(1)?.trim().orEmpty()
+
+    val args = JSONArray()
+    if (argsText.isNotEmpty()) {
+        args.put(argsText)
+    }
+
+    return OutgoingPayload(
+        JSONObject()
+            .put("type", "command")
+            .put("command", command)
+            .put("args", args)
+            .toString()
+    )
 }
 
 @Composable
@@ -200,14 +241,9 @@ fun ChatPanel(
             Button(
                 enabled = connected && input.isNotBlank(),
                 onClick = {
-                    val text = input.trim()
-                    if (text.isNotEmpty()) {
-                        val payload = JSONObject()
-                            .put("type", "message")
-                            .put("text", text)
-                            .toString()
-
-                        socket?.send(payload)
+                    val payload = buildOutgoingPayload(input)
+                    if (payload != null) {
+                        socket?.send(payload.json)
                         input = ""
                     }
                 }
