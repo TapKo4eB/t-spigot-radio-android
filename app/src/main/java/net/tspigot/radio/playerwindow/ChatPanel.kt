@@ -64,9 +64,8 @@ private object ChatSocketClient {
     }
 }
 
-private fun parseChatMessage(json: String): ChatMessage? {
+private fun parseChatMessage(obj: JSONObject): ChatMessage? {
     return try {
-        val obj = JSONObject(json)
         val type = obj.optString("type")
 
         when (type) {
@@ -160,11 +159,27 @@ fun ChatPanel(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                parseChatMessage(text)?.let { msg ->
-                    messages.add(msg)
-                    if (messages.size > 500) {
+                try {
+                    val json = JSONObject(text)
+                    if (json.has("history")) {
+                        val historyArray = json.getJSONArray("history")
+                        for (i in 0 until historyArray.length()) {
+                            val item = historyArray.getJSONObject(i)
+                            parseChatMessage(item)?.let { msg ->
+                                messages.add(msg)
+                            }
+                        }
+                    } else {
+                        parseChatMessage(json)?.let { msg ->
+                            messages.add(msg)
+                        }
+                    }
+
+                    while (messages.size > 500) {
                         messages.removeAt(0)
                     }
+                } catch (_: Exception) {
+                    // Ignore malformed JSON
                 }
             }
 
@@ -245,7 +260,6 @@ fun ChatPanel(
                 onClick = {
                     val text = input.trim()
 
-                    // Check if it's a command and if that command is unknown
                     if (text.startsWith("/")) {
                         val cmd = text.removePrefix("/").trim().split(Regex("\\s+"))[0].lowercase()
                         if (cmd !in VALID_COMMANDS) {
