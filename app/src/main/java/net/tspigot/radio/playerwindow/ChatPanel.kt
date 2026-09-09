@@ -162,7 +162,7 @@ fun ChatPanel(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 parseChatMessage(text)?.let { msg ->
                     messages.add(msg)
-                    if (messages.size > 100) {
+                    if (messages.size > 500) {
                         messages.removeAt(0)
                     }
                 }
