@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import okhttp3.OkHttpClient
@@ -31,10 +32,15 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+enum class ChatMessageKind {
+    Normal,
+    Like,
+    System
+}
 
 data class ChatMessage(
     val id: String,
-    val username: String,
+    val kind: ChatMessageKind,
     val text: String,
     val timestamp: Long
 )
@@ -56,14 +62,39 @@ private object ChatSocketClient {
 private fun parseChatMessage(json: String): ChatMessage? {
     return try {
         val obj = JSONObject(json)
-        if (obj.optString("type") != "message") return null
+        val type = obj.optString("type")
 
-        ChatMessage(
-            id = obj.optString("id"),
-            username = obj.optString("username", "anon"),
-            text = obj.optString("text", ""),
-            timestamp = obj.optLong("timestamp", 0L)
-        )
+        when (type) {
+            "message" -> ChatMessage(
+                id = obj.optString("id"),
+                kind = ChatMessageKind.Normal,
+                text = "${obj.optString("username", "anon")}: ${obj.optString("text", "")}",
+                timestamp = obj.optLong("timestamp", 0L)
+            )
+
+            "like" -> {
+                val username = obj.optString("username", "anon")
+                val track = obj.optJSONObject("track")
+                val song = track?.optString("title", "Unknown song") ?: "Unknown song"
+                val author = track?.optString("artist", "Unknown author") ?: "Unknown author"
+
+                ChatMessage(
+                    id = obj.optString("id"),
+                    kind = ChatMessageKind.Like,
+                    text = "$username liked $song by $author",
+                    timestamp = obj.optLong("timestamp", 0L)
+                )
+            }
+
+            "system" -> ChatMessage(
+                id = obj.optString("id"),
+                kind = ChatMessageKind.System,
+                text = obj.optString("text", ""),
+                timestamp = obj.optLong("timestamp", 0L)
+            )
+
+            else -> null
+        }
     } catch (_: Exception) {
         null
     }
@@ -135,10 +166,17 @@ fun ChatPanel(
                 .height(180.dp)
         ) {
             items(messages, key = { it.id }) { msg ->
+                val messageColor = when (msg.kind) {
+                    ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
+                    ChatMessageKind.Like -> Color(0xFF88ff88)
+                    ChatMessageKind.System -> Color(0xff99AAAA)
+                }
+
                 Text(
-                    text = "${msg.username}: ${msg.text}",
+                    text = msg.text,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    color = messageColor,
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(4.dp))
