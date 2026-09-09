@@ -457,7 +457,7 @@ fun ChatPanel(
                                     id = "local_${System.currentTimeMillis()}",
                                     kind = ChatMessageKind.System,
                                     text = "Unknown command: /$cmd",
-                                    timestamp = System.currentTimeMillis()
+                                    timestamp = Instant.now().epochSecond
                                 )
                             )
                             input = ""
