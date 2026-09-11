@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -57,6 +58,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.focus.onFocusChanged
 
 private val VALID_COMMANDS = setOf("like", "name", "say")
 
@@ -350,7 +352,11 @@ fun ChatPanel(
         }
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .imePadding()
+        ) {
         HorizontalDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -458,11 +464,26 @@ fun ChatPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedTextField(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged
+                    { focusState ->
+                        if (focusState.isFocused) {
+                            // Keyboard is about to come up: make sure we're
+                            // pinned to the latest messages once the panel
+                            // reflows upward.
+                            stickToBottom = true
+                            coroutineScope.launch {
+                                if (messages.isNotEmpty()) {
+                                    listState.animateScrollToItem(messages.size - 1)
+                                }
+                            }
+                        }
+                    },
                 value = input,
                 onValueChange = { input = it },
                 singleLine = true,
-                label = { Text("Say something, or /name <username>") }
+                label = { Text("Say something") }
             )
 
             IconButton(
