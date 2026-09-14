@@ -3,8 +3,19 @@ package net.tspigot.radio.playerwindow
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -124,70 +136,105 @@ private fun SongInfoDisplay(
             .padding(horizontal = 24.dp)
     ) {
         Column(
-            horizontalAlignment = Alignment.Start
+            horizontalAlignment = Alignment.Start,
+            modifier = Modifier.animateContentSize()
         ) {
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
-                        append(parsedTitle)
-                    }
-                    if (bracketPart != null) {
-                        append(" ")
-                        withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = Color(0xFF6A806A))) {
-                            append(bracketPart)
-                        }
-                    }
-                },
-                fontSize = 20.sp,
-                textAlign = TextAlign.Start,
-                softWrap = true
-            )
-
-            if (mainArtist.isNotBlank()) {
+            AnimatedContent(
+                targetState = parsedTitle to bracketPart,
+                transitionSpec = { fadeTitleTransition() },
+                label = "mainTitle"
+            ) { (title, bracket) ->
                 Text(
-                    text = "by $mainArtist",
-                    color = Color(0xFFB0B0B0),
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                            append(title)
+                        }
+                        if (bracket != null) {
+                            append(" ")
+                            withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = Color(0xFF6A806A))) {
+                                append(bracket)
+                            }
+                        }
+                    },
+                    fontSize = 20.sp,
                     textAlign = TextAlign.Start,
                     softWrap = true
                 )
             }
 
-            if (otherTracks.isNotEmpty()) {
-                Text(
-                    text = "with",
-                    color = Color(0xFF888888),
-                    softWrap = true,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-
-                otherTracks.forEach { (otherTitle, otherArtist) ->
+            AnimatedVisibility(
+                visible = mainArtist.isNotBlank(),
+                enter = fadeIn(tween(3000)),
+                exit = fadeOut(tween(2000))
+            ) {
+                AnimatedContent(
+                    targetState = mainArtist,
+                    transitionSpec = { fadeTitleTransition() },
+                    label = "mainArtist"
+                ) { artist ->
                     Text(
-                        text = buildAnnotatedString {
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
-                                append(otherTitle)
-                            }
-                            if (otherArtist.isNotBlank()) {
-                                append(" ")
-                                withStyle(
-                                    SpanStyle(
-                                        fontWeight = FontWeight.Normal,
-                                        fontStyle = FontStyle.Normal,
-                                        color = Color(0xFFB0B0B0)
-                                    )
-                                ) {
-                                    append("by $otherArtist")
-                                }
-                            }
-                        },
-                        fontSize = 16.sp,
+                        text = "by $artist",
+                        color = Color(0xFFB0B0B0),
                         textAlign = TextAlign.Start,
                         softWrap = true
                     )
                 }
             }
+
+            AnimatedVisibility(
+                visible = otherTracks.isNotEmpty(),
+                enter = fadeIn(tween(3000)) + expandVertically(tween(3000)),
+                exit = fadeOut(tween(2000)) + shrinkVertically(tween(2000))
+            ) {
+                Column {
+                    Text(
+                        text = "with",
+                        color = Color(0xFF888888),
+                        softWrap = true,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+
+                    otherTracks.forEach { (otherTitle, otherArtist) ->
+                        key(otherTitle, otherArtist) {
+                            AnimatedContent(
+                                targetState = otherTitle to otherArtist,
+                                transitionSpec = { fadeTitleTransition() },
+                                label = "otherTrack"
+                            ) { (title, artist) ->
+                                Text(
+                                    text = buildAnnotatedString {
+                                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                                            append(title)
+                                        }
+                                        if (artist.isNotBlank()) {
+                                            append(" ")
+                                            withStyle(
+                                                SpanStyle(
+                                                    fontWeight = FontWeight.Normal,
+                                                    fontStyle = FontStyle.Normal,
+                                                    color = Color(0xFFB0B0B0)
+                                                )
+                                            ) {
+                                                append("by $artist")
+                                            }
+                                        }
+                                    },
+                                    fontSize = 16.sp,
+                                    textAlign = TextAlign.Start,
+                                    softWrap = true
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+private fun fadeTitleTransition(): ContentTransform =
+    (fadeIn(tween(3000)) + slideInVertically(tween(3000)) { height -> height / 4 })
+        .togetherWith(fadeOut(tween(2000)) + slideOutVertically(tween(2000)) { height -> -height / 4 })
 
 @Composable
 fun PlayerScreen(
