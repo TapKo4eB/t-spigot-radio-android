@@ -8,13 +8,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +36,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
@@ -80,6 +91,110 @@ private fun parseOtherTracks(description: String): List<Pair<String, String>> {
             val parts = entry.split("|")
             if (parts.size == 2) parts[0] to parts[1] else null
         }
+}
+
+/**
+ * Splits a song title into the main part and a trailing "(...)" annotation, if present.
+ * "Put Everything Together by PLUS  (1972 Poland)" ->
+ *   ("Put Everything Together by PLUS", "(1972 Poland)")
+ */
+private fun parseSongTitle(title: String): Pair<String, String?> {
+    val regex = Regex("""\s*(\([^()]*\))\s*$""")
+    val match = regex.find(title)
+    return if (match != null) {
+        val bracketPart = match.groupValues[1]
+        val mainPart = title.substring(0, match.range.first).trimEnd()
+        mainPart to bracketPart
+    } else {
+        title to null
+    }
+}
+
+@Composable
+private fun SongInfoDisplay(
+    mainTitle: String,
+    mainArtist: String,
+    otherTracks: List<Pair<String, String>>,
+    modifier: Modifier = Modifier
+) {
+    val (parsedTitle, bracketPart) = remember(mainTitle) { parseSongTitle(mainTitle) }
+
+    Box(
+
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                        append(parsedTitle)
+                    }
+                    if (bracketPart != null) {
+                        append(" ")
+                        withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = Color(0xFF6A806A))) {
+                            append(bracketPart)
+                        }
+                    }
+                },
+                fontSize = 20.sp,
+                textAlign = TextAlign.Left,
+                softWrap = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (mainArtist.isNotBlank()) {
+                Text(
+                    text = "by $mainArtist",
+                    color = Color(0xFFB0B0B0),
+                    textAlign = TextAlign.Left,
+                    softWrap = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (otherTracks.isNotEmpty()) {
+                Text(
+                    text = "with",
+                    color = Color(0xFF888888),
+                    softWrap = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp)
+                )
+
+                otherTracks.forEach { (otherTitle, otherArtist) ->
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                                append(otherTitle)
+                            }
+                            if (otherArtist.isNotBlank()) {
+                                append(" ")
+                                withStyle(
+                                    SpanStyle(
+                                        fontWeight = FontWeight.Normal,
+                                        fontStyle = FontStyle.Normal,
+                                        color = Color(0xFFB0B0B0)
+                                    )
+                                ) {
+                                    append("by $otherArtist")
+                                }
+                            }
+                        },
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Left,
+                        softWrap = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -200,24 +315,11 @@ fun PlayerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                val fullText = buildString {
-                    append(mainTitle)
-                    if (mainArtist.isNotBlank()) {
-                        append("\nby $mainArtist")
-                    }
-
-                    if (otherTracks.isNotEmpty()) {
-                        append("\nwith")
-                        otherTracks.forEach { (otherTitle, otherArtist) ->
-                            append("\n$otherTitle")
-                            if (otherArtist.isNotBlank()) {
-                                append("\nby $otherArtist")
-                            }
-                        }
-                    }
-                }
-
-                Text(text = fullText)
+                SongInfoDisplay(
+                    mainTitle = mainTitle,
+                    mainArtist = mainArtist,
+                    otherTracks = otherTracks
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
