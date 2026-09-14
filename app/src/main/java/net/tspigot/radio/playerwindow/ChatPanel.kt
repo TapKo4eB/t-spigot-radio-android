@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -361,10 +362,24 @@ fun ChatPanel(
         HorizontalDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = if (connectionState.connected) "Chat" else "Chat (offline)",
-            style = MaterialTheme.typography.titleSmall
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (connectionState.connected) "Chat" else "Chat (offline)",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier
+                    .padding(end = 6.dp)
+            )
+            Icon(
+                painter = painterResource(R.drawable.refresh),
+                contentDescription = "Refresh",
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { /* action stub */}
+            )
+
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -465,7 +480,8 @@ fun ChatPanel(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 modifier = Modifier
