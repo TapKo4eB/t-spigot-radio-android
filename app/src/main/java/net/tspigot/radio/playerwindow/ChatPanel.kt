@@ -550,7 +550,6 @@ fun ChatPanel(
             IconButton(
                 enabled = connectionState.connected && input.isNotBlank(),
                 modifier = Modifier
-                    .align(Alignment.CenterVertically)
                     .background(
                         color = MaterialTheme.colorScheme.primary,
                         shape = RoundedCornerShape(10)),
