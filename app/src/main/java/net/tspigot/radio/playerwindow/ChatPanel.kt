@@ -39,13 +39,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.tspigot.radio.AppConfig
 import net.tspigot.radio.R
@@ -57,16 +59,19 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
-import androidx.compose.ui.focus.onFocusChanged
+import kotlin.time.Duration.Companion.seconds
 
 private val VALID_COMMANDS = setOf("like", "name", "say")
 
 private val TIME_CODE_COLOR = Color(0xFF888888)
 
 private val timeCodeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 
 enum class ChatMessageKind {
     Normal,
@@ -86,14 +91,28 @@ data class ChatMessage(
  * local-time "HH:mm" string. Falls back to "--:--" if the timestamp is
  * missing/invalid (0 or negative) so a malformed message never crashes
  * the row.
+ *
+ * If the message's local calendar date is before today's local calendar
+ * date, the result is prefixed with how many days ago that date was,
+ * e.g. "1d 12:24" for yesterday, "792d 12:24" for 792 days ago.
  */
 private fun formatTimeCode(timestampSeconds: Long): String {
     if (timestampSeconds <= 0L) return "--:--"
 
     return try {
-        Instant.ofEpochSecond(timestampSeconds)
-            .atZone(ZoneId.systemDefault())
-            .format(timeCodeFormatter)
+        val zone = ZoneId.systemDefault()
+        val messageDateTime = Instant.ofEpochSecond(timestampSeconds).atZone(zone)
+        val timePart = messageDateTime.format(timeCodeFormatter)
+
+        val messageDate = messageDateTime.toLocalDate()
+        val today = LocalDate.now(zone)
+        val daysAgo = ChronoUnit.DAYS.between(messageDate, today)
+
+        if (daysAgo > 0) {
+            "${daysAgo}d $timePart"
+        } else {
+            timePart
+        }
     } catch (_: Exception) {
         "--:--"
     }
@@ -250,6 +269,8 @@ fun ChatPanel(
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var input by remember { mutableStateOf("") }
 
+    var reconnectTrigger by remember { mutableStateOf(0) }
+
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -292,9 +313,23 @@ fun ChatPanel(
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(reconnectTrigger) {
+        var pendingReconnectJob: Job? = null
+
+        fun scheduleReconnect() {
+            pendingReconnectJob?.cancel()
+            pendingReconnectJob = coroutineScope.launch {
+                delay(10.seconds)
+                reconnectTrigger++
+            }
+        }
+
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                messages.clear()
+                stickToBottom = true
+                newMessageCount = 0
+
                 connectionState.connected = true
                 connectionState.socket = webSocket
             }
@@ -337,17 +372,20 @@ fun ChatPanel(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 connectionState.connected = false
                 connectionState.socket = null
+                scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 connectionState.connected = false
                 connectionState.socket = null
+                scheduleReconnect()
             }
         }
 
         val ws = ChatSocketClient.connect(listener)
 
         onDispose {
+            pendingReconnectJob?.cancel()
             connectionState.connected = false
             connectionState.socket = null
             ws.close(1000, "bye")
@@ -371,13 +409,17 @@ fun ChatPanel(
                 modifier = Modifier
                     .padding(end = 6.dp)
             )
-            Icon(
-                painter = painterResource(R.drawable.refresh),
-                contentDescription = "Refresh",
-                modifier = Modifier
-                    .size(18.dp)
-                    .clickable { /* action stub */}
-            )
+            if (!connectionState.connected) {
+                Icon(
+                    painter = painterResource(R.drawable.refresh),
+                    contentDescription = "Refresh",
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable {
+                            reconnectTrigger++
+                        }
+                )
+            }
 
         }
 
