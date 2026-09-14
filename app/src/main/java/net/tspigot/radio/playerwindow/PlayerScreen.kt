@@ -120,14 +120,11 @@ private fun SongInfoDisplay(
     val (parsedTitle, bracketPart) = remember(mainTitle) { parseSongTitle(mainTitle) }
 
     Box(
-
         modifier = modifier
-            .fillMaxWidth()
             .padding(horizontal = 24.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.Start
         ) {
             Text(
                 text = buildAnnotatedString {
@@ -142,18 +139,16 @@ private fun SongInfoDisplay(
                     }
                 },
                 fontSize = 20.sp,
-                textAlign = TextAlign.Left,
-                softWrap = true,
-                modifier = Modifier.fillMaxWidth()
+                textAlign = TextAlign.Start,
+                softWrap = true
             )
 
             if (mainArtist.isNotBlank()) {
                 Text(
                     text = "by $mainArtist",
                     color = Color(0xFFB0B0B0),
-                    textAlign = TextAlign.Left,
-                    softWrap = true,
-                    modifier = Modifier.fillMaxWidth()
+                    textAlign = TextAlign.Start,
+                    softWrap = true
                 )
             }
 
@@ -162,9 +157,7 @@ private fun SongInfoDisplay(
                     text = "with",
                     color = Color(0xFF888888),
                     softWrap = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp)
+                    modifier = Modifier.padding(start = 8.dp)
                 )
 
                 otherTracks.forEach { (otherTitle, otherArtist) ->
@@ -187,9 +180,8 @@ private fun SongInfoDisplay(
                             }
                         },
                         fontSize = 16.sp,
-                        textAlign = TextAlign.Left,
-                        softWrap = true,
-                        modifier = Modifier.fillMaxWidth()
+                        textAlign = TextAlign.Start,
+                        softWrap = true
                     )
                 }
             }
