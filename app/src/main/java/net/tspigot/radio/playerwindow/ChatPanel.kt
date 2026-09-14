@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -352,11 +353,11 @@ fun ChatPanel(
         }
     }
 
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .imePadding()
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .imePadding()
+    ) {
         HorizontalDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -372,34 +373,37 @@ fun ChatPanel(
                 .fillMaxWidth()
                 .height(180.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                state = listState
-            ) {
-                items(messages, key = { it.id }) { msg ->
-                    val messageColor = when (msg.kind) {
-                        ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
-                        ChatMessageKind.Like -> Color(0xFF88ff88)
-                        ChatMessageKind.System -> Color(0xff99AAAA)
-                    }
-
-                    val displayText = buildAnnotatedString {
-                        withStyle(SpanStyle(color = TIME_CODE_COLOR)) {
-                            append(formatTimeCode(msg.timestamp))
+            SelectionContainer {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = listState
+                ) {
+                    items(messages, key = { it.id }) { msg ->
+                        val messageColor = when (msg.kind) {
+                            ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
+                            ChatMessageKind.Like -> Color(0xFF88ff88)
+                            ChatMessageKind.System -> Color(0xff99AAAA)
                         }
-                        append(" ")
-                        withStyle(SpanStyle(color = messageColor)) {
-                            append(msg.text)
-                        }
-                    }
 
-                    Text(
-                        text = displayText,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                        val displayText = buildAnnotatedString {
+                            withStyle(SpanStyle(color = TIME_CODE_COLOR)) {
+                                append(formatTimeCode(msg.timestamp))
+                            }
+                            append(" ")
+                            withStyle(SpanStyle(color = messageColor)) {
+                                append(msg.text)
+                            }
+                        }
+
+                        // maxLines/overflow removed — this was clipping
+                        // long messages with an ellipsis. The Text now
+                        // wraps and grows to fit its full content.
+                        Text(
+                            text = displayText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
                 }
             }
 
@@ -466,8 +470,7 @@ fun ChatPanel(
             OutlinedTextField(
                 modifier = Modifier
                     .weight(1f)
-                    .onFocusChanged
-                    { focusState ->
+                    .onFocusChanged { focusState ->
                         if (focusState.isFocused) {
                             // Keyboard is about to come up: make sure we're
                             // pinned to the latest messages once the panel
