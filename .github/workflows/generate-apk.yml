@@ -65,6 +65,7 @@ jobs:
         with:
           name: tspigotradio-release
           path: app/build/outputs/apk/release/app-release.apk
+          archive: false
           
       # ?????????????
       # PROFIT!
