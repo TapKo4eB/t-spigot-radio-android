@@ -16,6 +16,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,8 +26,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,7 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -61,6 +68,9 @@ import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
 import net.tspigot.radio.R
 import kotlin.time.Duration.Companion.seconds
+
+private const val IMAGE_FETCH_INTERVAL_SECONDS = 120L
+private const val IMAGE_FADE_DURATION_MS = 5000
 
 private fun hasNetworkConnectivity(context: Context): Boolean {
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -84,6 +94,42 @@ private suspend fun fetchSlogan(): String = kotlinx.coroutines.withContext(kotli
         response
     } catch (_: Exception) {
         ""
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private suspend fun fetchBackgroundImageName(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val connection = java.net.URL("https://radio.tspigot.net/api/image").openConnection() as java.net.HttpURLConnection
+    try {
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "text/plain")
+        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
+
+        connection.inputStream.bufferedReader().use { it.readText().trim() }
+    } catch (_: Exception) {
+        ""
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private suspend fun fetchBackgroundImageBitmap(fileName: String): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (fileName.isBlank()) return@withContext null
+
+    val connection = java.net.URL("https://radio.tspigot.net/images/$fileName").openConnection() as java.net.HttpURLConnection
+    try {
+        connection.connectTimeout = 5000
+        connection.readTimeout = 5000
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
+
+        val bytes = connection.inputStream.use { it.readBytes() }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+    } catch (_: Exception) {
+        null
     } finally {
         connection.disconnect()
     }
@@ -248,6 +294,11 @@ fun PlayerScreen(
     var sloganText by remember { mutableStateOf("") }
     val sloganAlpha = remember { Animatable(0f) }
 
+    // Currently playing background image, fetched from the API every
+    // IMAGE_FETCH_INTERVAL_SECONDS and crossfaded in/out over IMAGE_FADE_DURATION_MS.
+    var backgroundImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    val backgroundImageAlpha = remember { Animatable(0f) }
+
     // Shared connection state: ChatPanel owns the socket lifecycle,
     // but this button also needs to send over it.
     val chatConnection = remember { ChatConnectionState() }
@@ -275,6 +326,24 @@ fun PlayerScreen(
             sloganAlpha.animateTo(1f, animationSpec = tween(durationMillis = 3500))
 
             delay(90.seconds)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            val imageName = fetchBackgroundImageName()
+            if (imageName.isNotBlank()) {
+                val bitmap = fetchBackgroundImageBitmap(imageName)
+                if (bitmap != null) {
+                    if (backgroundImage != null) {
+                        backgroundImageAlpha.animateTo(0f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
+                    }
+                    backgroundImage = bitmap
+                    backgroundImageAlpha.animateTo(0.5f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
+                }
+            }
+
+            delay(IMAGE_FETCH_INTERVAL_SECONDS.seconds)
         }
     }
 
@@ -335,6 +404,18 @@ fun PlayerScreen(
                 .weight(1f)
                 .fillMaxSize()
         ) {
+            backgroundImage?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    alpha = backgroundImageAlpha.value,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                )
+            }
+
             Text(
                 text = sloganText,
                 color = Color(0xFF888844),
@@ -343,6 +424,11 @@ fun PlayerScreen(
                     .padding(top = 40.dp)
                     .padding(horizontal = 16.dp)
                     .graphicsLayer(alpha = sloganAlpha.value)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             )
 
             Column(
