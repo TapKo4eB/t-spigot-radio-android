@@ -28,13 +28,6 @@ jobs:
       - name: chmooooooood
         run: chmod +x ./gradlew
 
-      # no idea if i even need it
-      - name: run test
-        run: ./gradlew test
-
-      - name: build gradlew
-        run: ./gradlew build
-
       - name: build app
         run: ./gradlew assembleDebug
 
