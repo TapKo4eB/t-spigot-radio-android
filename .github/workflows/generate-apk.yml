@@ -42,7 +42,7 @@ jobs:
 
       - name: Sign App
         id: sign_app
-        uses: ilharp/sign-android-release@v1.0.4
+        uses: ilharp/sign-android-release@v2
         with:
           releaseDir: app/build/outputs
           signingKey: ${{ secrets.ANDROID_KEYSTORE }}
