@@ -315,8 +315,10 @@ fun PlayerScreen(
         label = "keyboardBlur"
     )
 
+    var sloganText by remember { mutableStateOf("") }
+
     val sloganBackgroundAlpha by animateFloatAsState(
-        targetValue = if (keyboardVisible) 0f else 0.35f,
+        targetValue = if (keyboardVisible || sloganText.isBlank()) 0f else 0.35f,
         animationSpec = tween(durationMillis = 250),
         label = "sloganBackgroundAlpha"
     )
@@ -327,7 +329,6 @@ fun PlayerScreen(
     var otherTracks by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
-    var sloganText by remember { mutableStateOf("") }
     val sloganAlpha = remember { Animatable(0f) }
 
     // Currently playing background image, fetched from the API every
