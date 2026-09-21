@@ -76,6 +76,7 @@ import androidx.media3.session.MediaController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.HistoryActivity
 import net.tspigot.radio.R
 import net.tspigot.radio.SettingsActivity
 import kotlin.time.Duration.Companion.seconds
@@ -158,23 +159,6 @@ private fun parseOtherTracks(description: String): List<Pair<String, String>> {
         }
 }
 
-/**
- * Splits a song title into the main part and a trailing "(...)" annotation, if present.
- * "Put Everything Together by PLUS  (1972 Poland)" ->
- *   ("Put Everything Together by PLUS", "(1972 Poland)")
- */
-private fun parseSongTitle(title: String): Pair<String, String?> {
-    val regex = Regex("""\s*(\([^()]*\))\s*$""")
-    val match = regex.find(title)
-    return if (match != null) {
-        val bracketPart = match.groupValues[1]
-        val mainPart = title.substring(0, match.range.first).trimEnd()
-        mainPart to bracketPart
-    } else {
-        title to null
-    }
-}
-
 @Composable
 private fun SongInfoDisplay(
     mainTitle: String,
@@ -205,7 +189,11 @@ private fun SongInfoDisplay(
                             }
                             if (bracket != null) {
                                 append(" ")
-                                withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = Color(0xFF6A806A))) {
+                                withStyle(
+                                    SpanStyle(
+                                        fontStyle = FontStyle.Italic, color = SongColors.Bracket
+                                    )
+                                ) {
                                     append(bracket)
                                 }
                             }
@@ -228,7 +216,7 @@ private fun SongInfoDisplay(
                     ) { artist ->
                         Text(
                             text = "by $artist",
-                            color = Color(0xFFB0B0B0),
+                            color = SongColors.Artist,
                             textAlign = TextAlign.Start,
                             softWrap = true
                         )
@@ -272,7 +260,7 @@ private fun SongInfoDisplay(
                                                     SpanStyle(
                                                         fontWeight = FontWeight.Normal,
                                                         fontStyle = FontStyle.Normal,
-                                                        color = Color(0xFFB0B0B0)
+                                                        color = SongColors.Artist
                                                     )
                                                 ) {
                                                     append("by $artist")
@@ -487,17 +475,30 @@ fun PlayerScreen(
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                        context.startActivity(
-                            Intent(context,
-                            SettingsActivity::class.java))
+                Column {
+                    IconButton(
+                        onClick = {
+                            context.startActivity(Intent(context, SettingsActivity::class.java))
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.settings),
+                            contentDescription = "Settings"
+                        )
                     }
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.settings),
-                        contentDescription = "Settings"
-                    )
+
+                    IconButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(context, HistoryActivity::class.java)
+                            )
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.music_history),
+                            contentDescription = "History"
+                        )
+                    }
                 }
             }
 

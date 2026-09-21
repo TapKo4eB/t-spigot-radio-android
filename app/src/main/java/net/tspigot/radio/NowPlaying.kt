@@ -1,5 +1,7 @@
 package net.tspigot.radio
 
+import org.json.JSONObject
+
 data class NowPlaying(
     val id: Int? = null,
     val album: String? = null,
@@ -23,4 +25,20 @@ data class NowPlaying(
     val year: Int? = null,
     val country: String? = null,
     val valence: Int? = null
-)
+) {
+    companion object {
+        fun fromJson(o: JSONObject): NowPlaying = NowPlaying(
+            id = if (o.has("id")) o.optInt("id") else null,
+            album = o.optString("album").ifEmpty { null },
+            artist = o.optString("artist").ifEmpty { null },
+            artistId = if (o.has("artistId")) o.optInt("artistId") else null,
+            duration = if (o.has("duration")) o.optDouble("duration") else null,
+            lastPlayEpoch = if (o.has("lastPlayEpoch")) o.optLong("lastPlayEpoch") else null,
+            path = o.optString("path").ifEmpty { null },
+            title = o.optString("title").ifEmpty { null },
+            type = o.optString("type").ifEmpty { null },
+            year = if (o.has("year")) o.optInt("year") else null,
+            country = o.optString("country").ifEmpty { null }
+        )
+    }
+}
