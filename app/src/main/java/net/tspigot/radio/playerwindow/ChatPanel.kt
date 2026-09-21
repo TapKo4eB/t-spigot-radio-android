@@ -65,6 +65,9 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import net.tspigot.radio.AppSettings
 
 private val VALID_COMMANDS = setOf("like", "name", "say")
 
@@ -261,11 +264,32 @@ internal fun buildOutgoingPayload(input: String): OutgoingPayload? {
     )
 }
 
+/**
+ * Sends a user-originated payload (message, /like, /say, ...). If no /name has
+ * been sent on this connection yet and a chat name is set, sends /name first.
+ * Returns true if the payload itself was sent.
+ */
+internal fun ChatConnectionState.sendUserPayload(context: Context, payloadJson: String): Boolean {
+    val ws = socket ?: return false
+
+    val name = AppSettings.getChatName(context)
+    if (name.isNotBlank() && name != sentName) {
+        val namePayload = buildOutgoingPayload("/name $name")
+        if (namePayload != null && ws.send(namePayload.json)) {
+            sentName = name
+        }
+    }
+
+    return ws.send(payloadJson)
+}
+
 @Composable
 fun ChatPanel(
     connectionState: ChatConnectionState,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var input by remember { mutableStateOf("") }
 
@@ -330,6 +354,7 @@ fun ChatPanel(
                 stickToBottom = true
                 newMessageCount = 0
 
+                connectionState.sentName = null
                 connectionState.connected = true
                 connectionState.socket = webSocket
             }
@@ -590,6 +615,18 @@ fun ChatPanel(
                             return@IconButton
                         }
 
+                        if (cmd == "name") {
+                            AppSettings.setChatName(context, argsText)
+
+                            val payload = buildOutgoingPayload(text)
+                            if (payload != null &&
+                                connectionState.socket?.send(payload.json) == true) {
+                                connectionState.sentName = argsText
+                            }
+                            input = ""
+                            return@IconButton
+                        }
+
                         if (cmd == "say") {
                             // /say is handled entirely client-side: its
                             // argument is sent as a plain "message" payload,
@@ -608,7 +645,7 @@ fun ChatPanel(
                                     .put("type", "message")
                                     .put("text", argsText)
                                     .toString()
-                                connectionState.socket?.send(sayPayload)
+                                connectionState.sendUserPayload(context, sayPayload)
                             }
                             input = ""
                             return@IconButton
@@ -617,7 +654,7 @@ fun ChatPanel(
 
                     val payload = buildOutgoingPayload(input)
                     if (payload != null) {
-                        connectionState.socket?.send(payload.json)
+                        connectionState.sendUserPayload(context, payload.json)
                         input = ""
                     }
                 }

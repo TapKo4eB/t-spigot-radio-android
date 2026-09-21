@@ -8,4 +8,6 @@ import okhttp3.WebSocket
 class ChatConnectionState {
     var connected by mutableStateOf(false)
     var socket by mutableStateOf<WebSocket?>(null)
+    @Volatile
+    var sentName: String? = null
 }

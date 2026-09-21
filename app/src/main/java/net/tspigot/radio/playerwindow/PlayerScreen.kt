@@ -67,8 +67,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaMetadata
@@ -461,38 +459,47 @@ fun PlayerScreen(
                 )
             }
 
-            IconButton(
-                onClick = {
-                    context.startActivity(
-                        Intent(context,
-                        SettingsActivity::class.java))
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 32.dp, end = 8.dp)
-                    .blur(blurRadius)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.settings),
-                    contentDescription = "Settings"
-                )
-            }
-
-            Text(
-                text = sloganText,
-                color = Color(0xFF888844),
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 40.dp)
-                    .padding(horizontal = 16.dp) // todo give space for button on the right
-                    .blur(blurRadius)
-                    .graphicsLayer(alpha = sloganAlpha.value)
-                    .background(
-                        color = Color.Black.copy(alpha = sloganBackgroundAlpha),
-                        shape = RoundedCornerShape(8.dp)
+                    .fillMaxWidth()
+                    .padding(top = 32.dp, start = 8.dp, end = 8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 8.dp, start = 8.dp, end = 8.dp),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    Text(
+                        text = sloganText,
+                        color = Color(0xFF888844),
+                        modifier = Modifier
+                            .blur(blurRadius)
+                            .graphicsLayer(alpha = sloganAlpha.value)
+                            .background(
+                                color = Color.Black.copy(alpha = sloganBackgroundAlpha),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     )
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
+                }
+
+                IconButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(context,
+                            SettingsActivity::class.java))
+                    }
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.settings),
+                        contentDescription = "Settings"
+                    )
+                }
+            }
 
             Column(
                 modifier = Modifier.align(Alignment.Center),
@@ -544,7 +551,7 @@ fun PlayerScreen(
                             // already favorited — the action stays the same.
                             val payload = buildOutgoingPayload("/like")
                             val sent = payload != null &&
-                                    chatConnection.socket?.send(payload.json) == true
+                                    chatConnection.sendUserPayload(context, payload.json)
 
                             if (sent) {
                                 isFavorited = true
