@@ -18,8 +18,8 @@
         android:theme="@style/Theme.TSpigotRadio">
         <activity
             android:name=".playerwindow.MainActivity"
-            android:launchMode="singleTop"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.TSpigotRadio"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -28,6 +28,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <service
             android:name=".PlaybackService"
             android:exported="false"
@@ -38,6 +39,9 @@
             </intent-filter>
         </service>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

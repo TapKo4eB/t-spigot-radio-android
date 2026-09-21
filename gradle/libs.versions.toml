@@ -12,6 +12,8 @@ foundationLayout = "1.12.0"
 okhttp = "5.5.0"
 json = "20260814"
 runtime = "1.12.0"
+material = "1.10.0"
+activityKtx = "1.13.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.19.0" }
@@ -38,6 +40,8 @@ androidx-compose-foundation-layout = { group = "androidx.compose.foundation", na
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
