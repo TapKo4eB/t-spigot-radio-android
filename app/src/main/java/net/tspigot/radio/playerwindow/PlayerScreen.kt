@@ -1,6 +1,7 @@
 package net.tspigot.radio.playerwindow
 
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.animation.AnimatedContent
@@ -78,6 +79,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
 import net.tspigot.radio.R
+import net.tspigot.radio.SettingsActivity
 import kotlin.time.Duration.Companion.seconds
 
 private const val IMAGE_FETCH_INTERVAL_SECONDS = 120L
@@ -459,13 +461,30 @@ fun PlayerScreen(
                 )
             }
 
+            IconButton(
+                onClick = {
+                    context.startActivity(
+                        Intent(context,
+                        SettingsActivity::class.java))
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 32.dp, end = 8.dp)
+                    .blur(blurRadius)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.settings),
+                    contentDescription = "Settings"
+                )
+            }
+
             Text(
                 text = sloganText,
                 color = Color(0xFF888844),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 40.dp)
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 16.dp) // todo give space for button on the right
                     .blur(blurRadius)
                     .graphicsLayer(alpha = sloganAlpha.value)
                     .background(
