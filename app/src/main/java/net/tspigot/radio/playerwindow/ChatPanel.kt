@@ -1,5 +1,6 @@
 package net.tspigot.radio.playerwindow
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,26 +31,32 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.AppSettings
 import net.tspigot.radio.R
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -64,16 +71,22 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.seconds
-import android.content.Context
-import androidx.compose.ui.platform.LocalContext
-import net.tspigot.radio.AppSettings
+
+private const val MAX_MESSAGES = 1000
 
 private val VALID_COMMANDS = setOf("like", "name", "say")
 
 private val TIME_CODE_COLOR = Color(0xFF888888)
 
 private val timeCodeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+/** Source of unique fallback ids (missing/blank server ids, local messages). */
+private val idCounter = AtomicLong()
+
+private fun syntheticId(prefix: String): String = "${prefix}_${idCounter.incrementAndGet()}"
 
 
 enum class ChatMessageKind {
@@ -87,6 +100,21 @@ data class ChatMessage(
     val kind: ChatMessageKind,
     val text: String,
     val timestamp: Long
+) {
+    /**
+     * Computed once, when the message is created (for server messages that is
+     * on the OkHttp thread, not during composition). Not part of equals/hashCode.
+     * Note: the "Nd" day prefix is fixed at creation time and is not refreshed
+     * after midnight.
+     */
+    val timeCode: String = formatTimeCode(timestamp)
+}
+
+private fun localSystemMessage(text: String) = ChatMessage(
+    id = syntheticId("local"),
+    kind = ChatMessageKind.System,
+    text = text,
+    timestamp = Instant.now().epochSecond
 )
 
 /**
@@ -121,6 +149,87 @@ private fun formatTimeCode(timestampSeconds: Long): String {
     }
 }
 
+/** A unit of work handed from the socket thread to the UI thread. */
+internal class Incoming(
+    val messages: List<ChatMessage>,
+    /** If true, the current list is discarded before [messages] are added. */
+    val clear: Boolean
+)
+
+internal class BatchResult(
+    val cleared: Boolean,
+    val addedCount: Int
+)
+
+/**
+ * Holds the chat message list.
+ *
+ * Threading model: any thread may call [post] / [reset] (they only push into a
+ * channel). A single consumer on the UI side calls [applyNextBatch], which
+ * drains everything that has queued up, merges/dedupes/trims it on a
+ * background dispatcher, and publishes ONE new immutable list. So a burst of
+ * messages (or a big history dump) costs one recomposition, not hundreds, and
+ * Compose state is only ever written from the main thread.
+ *
+ * To keep the messages across screen rotation/navigation, create this in a
+ * ViewModel (or other longer-lived holder) and pass it to [ChatPanel].
+ */
+@Stable
+class ChatMessageStore {
+    var messages: List<ChatMessage> by mutableStateOf(emptyList())
+        private set
+
+    private val incoming = Channel<Incoming>(Channel.UNLIMITED)
+
+    /** Appends messages. Safe to call from any thread. */
+    fun post(newMessages: List<ChatMessage>) {
+        if (newMessages.isNotEmpty()) {
+            incoming.trySend(Incoming(newMessages, clear = false))
+        }
+    }
+
+    /** Clears the list. Safe to call from any thread. */
+    fun reset() {
+        incoming.trySend(Incoming(emptyList(), clear = true))
+    }
+
+    internal suspend fun applyNextBatch(): BatchResult {
+        val batch = ArrayList<Incoming>()
+        batch.add(incoming.receive())
+        while (true) {
+            val next = incoming.tryReceive().getOrNull() ?: break
+            batch.add(next)
+        }
+
+        var cleared = false
+        var added = 0
+        for (b in batch) {
+            if (b.clear) {
+                cleared = true
+                added = 0
+            } else {
+                added += b.messages.size
+            }
+        }
+
+        val current = messages
+        val merged = withContext(Dispatchers.Default) {
+            val working = ArrayList<ChatMessage>(current.size + added)
+            working.addAll(current)
+            for (b in batch) {
+                if (b.clear) working.clear()
+                working.addAll(b.messages)
+            }
+            // LazyColumn crashes on duplicate keys, so drop repeated ids
+            // (e.g. a live message that is also present in the history dump).
+            working.distinctBy { it.id }.takeLast(MAX_MESSAGES)
+        }
+
+        messages = merged
+        return BatchResult(cleared, added)
+    }
+}
+
 private object ChatSocketClient {
     private val client = OkHttpClient.Builder()
         .pingInterval(15, TimeUnit.SECONDS)
@@ -139,13 +248,18 @@ private object ChatSocketClient {
 private fun parseChatMessage(obj: JSONObject): ChatMessage? {
     return try {
         val type = obj.optString("type")
+        // Missing/blank ids would collide as LazyColumn keys and crash the list.
+        val id = obj.optString("id").ifBlank { syntheticId("gen") }
+        val timestamp = obj.optLong("timestamp", 0L)
 
         when (type) {
             "message" -> ChatMessage(
-                id = obj.optString("id"),
+                id = id,
                 kind = ChatMessageKind.Normal,
-                text = "${obj.optString("username", "anon")}: ${obj.optString("text", "")}",
-                timestamp = obj.optLong("timestamp", 0L)
+                text = "${obj.optString(
+                    "username", 
+                    "anon")}: ${obj.optString("text", "")}",
+                timestamp = timestamp
             )
 
             "like" -> {
@@ -155,18 +269,18 @@ private fun parseChatMessage(obj: JSONObject): ChatMessage? {
                 val author = track?.optString("artist", "Unknown author") ?: "Unknown author"
 
                 ChatMessage(
-                    id = obj.optString("id"),
+                    id = id,
                     kind = ChatMessageKind.Like,
                     text = "$username liked $song by $author",
-                    timestamp = obj.optLong("timestamp", 0L)
+                    timestamp = timestamp
                 )
             }
 
             "system" -> ChatMessage(
-                id = obj.optString("id"),
+                id = id,
                 kind = ChatMessageKind.System,
                 text = obj.optString("text", ""),
-                timestamp = obj.optLong("timestamp", 0L)
+                timestamp = timestamp
             )
 
             else -> null
@@ -189,7 +303,9 @@ private fun parseHistoryMessages(historyArray: JSONArray): List<ChatMessage> {
 
             val msg = parseChatMessage(item)
             if (msg == null) {
-                Log.w("ChatPanel", "history[$i] failed to parse (unknown type or bad fields), skipping")
+                Log.w(
+                    "ChatPanel",
+                    "history[$i] failed to parse (unknown type or bad fields), skipping")
                 continue
             }
 
@@ -283,14 +399,53 @@ internal fun ChatConnectionState.sendUserPayload(context: Context, payloadJson: 
     return ws.send(payloadJson)
 }
 
+/**
+ * One chat line. Kept as its own composable so the annotated string is built
+ * once per message (and only rebuilt if the message or its color changes),
+ * instead of on every recomposition/scroll-in.
+ */
+@Composable
+private fun ChatMessageRow(msg: ChatMessage) {
+    val messageColor = when (msg.kind) {
+        ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
+        ChatMessageKind.Like -> Color(0xFF88ff88)
+        ChatMessageKind.System -> Color(0xff99AAAA)
+    }
+
+    val displayText = remember(msg.id, messageColor) {
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = TIME_CODE_COLOR)) {
+                append(msg.timeCode)
+            }
+            append(" ")
+            withStyle(SpanStyle(color = messageColor)) {
+                append(msg.text)
+            }
+        }
+    }
+
+    // Selection is scoped per message: a single SelectionContainer around the
+    // whole LazyColumn makes every row register with one shared registrar,
+    // which is expensive. The trade-off is that a drag-selection can no
+    // longer span several messages.
+    SelectionContainer {
+        Text(
+            text = displayText,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+    }
+}
+
 @Composable
 fun ChatPanel(
     connectionState: ChatConnectionState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    store: ChatMessageStore = remember { ChatMessageStore() }
 ) {
     val context = LocalContext.current
 
-    val messages = remember { mutableStateListOf<ChatMessage>() }
+    val messages = store.messages
     var input by remember { mutableStateOf("") }
 
     var reconnectTrigger by remember { mutableStateOf(0) }
@@ -298,29 +453,46 @@ fun ChatPanel(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // True while the list is scrolled all the way to the last item.
+    // The list uses reverseLayout = true, so index 0 is the NEWEST message and
+    // it sits at the bottom. "At the bottom" is therefore simply "first
+    // visible item is index 0 with no scroll offset" - no need to walk
+    // visibleItemsInfo.
     val isAtBottom by remember {
         derivedStateOf {
-            val layoutInfo = listState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
-            if (layoutInfo.totalItemsCount == 0 || visibleItems.isEmpty()) {
-                true
-            } else {
-                val lastVisible = visibleItems.last()
-                lastVisible.index == layoutInfo.totalItemsCount - 1 &&
-                        (lastVisible.offset + lastVisible.size) <= layoutInfo.viewportEndOffset
-            }
+            listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0
         }
     }
 
     var stickToBottom by remember { mutableStateOf(true) }
     var newMessageCount by remember { mutableStateOf(0) }
+    var userDragging by remember { mutableStateOf(false) }
 
+    fun scrollToNewest() {
+        coroutineScope.launch {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // Track whether the finger is currently dragging the list.
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { interaction ->
-            if (interaction is DragInteraction.Start && !isAtBottom) {
-                stickToBottom = false
+            when (interaction) {
+                is DragInteraction.Start -> userDragging = true
+                is DragInteraction.Stop,
+                is DragInteraction.Cancel -> userDragging = false
+
+                else -> Unit
             }
+        }
+    }
+
+    // The user pulled the list away from the bottom by hand: stop auto-following.
+    // (Checked while dragging rather than at drag start, because at drag start
+    // the list is still at the bottom.)
+    LaunchedEffect(listState) {
+        snapshotFlow { userDragging && !isAtBottom }.collect { leftBottomByDrag ->
+            if (leftBottomByDrag) stickToBottom = false
         }
     }
 
@@ -331,16 +503,39 @@ fun ChatPanel(
         }
     }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty() && stickToBottom) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Keyed on the newest message id, not on messages.size: once the list is
+    // capped at MAX_MESSAGES the size stops changing, but the newest id still does.
+    val newestId = messages.lastOrNull()?.id
+    LaunchedEffect(newestId) {
+        if (newestId != null && stickToBottom) {
+            // One-item hop with reverseLayout, never a long scroll.
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // Single consumer for everything the socket (and local commands) produce.
+    // Each iteration publishes one batched update on the main thread.
+    LaunchedEffect(store) {
+        while (true) {
+            val result = store.applyNextBatch()
+            if (result.cleared) {
+                stickToBottom = true
+                newMessageCount = 0
+                listState.scrollToItem(0)
+            } else if (result.addedCount > 0 && !stickToBottom) {
+                newMessageCount += result.addedCount
+            }
         }
     }
 
     DisposableEffect(reconnectTrigger) {
         var pendingReconnectJob: Job? = null
+        // Callbacks from a socket that has already been disposed must not
+        // touch shared connection state or schedule reconnects.
+        val disposed = AtomicBoolean(false)
 
         fun scheduleReconnect() {
+            if (disposed.get()) return
             pendingReconnectJob?.cancel()
             pendingReconnectJob = coroutineScope.launch {
                 delay(10.seconds)
@@ -350,9 +545,9 @@ fun ChatPanel(
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                messages.clear()
-                stickToBottom = true
-                newMessageCount = 0
+                if (disposed.get()) return
+
+                store.reset()
 
                 connectionState.sentName = null
                 connectionState.connected = true
@@ -360,47 +555,44 @@ fun ChatPanel(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (disposed.get()) return
+
                 try {
                     val json = JSONObject(text)
-                    val sizeBefore = messages.size
 
                     if (json.has("history")) {
                         val historyArray = json.optJSONArray("history")
                         if (historyArray != null) {
-                            messages.addAll(parseHistoryMessages(historyArray))
+                            store.post(parseHistoryMessages(historyArray))
                         } else {
                             Log.w("ChatPanel", "'history' field present but not an array")
                         }
                     } else {
                         parseChatMessage(json)?.let { msg ->
-                            messages.add(msg)
+                            store.post(listOf(msg))
                         }
                     }
-
-                    val addedCount = messages.size - sizeBefore
-                    if (addedCount > 0 && !stickToBottom) {
-                        newMessageCount += addedCount
-                    }
-
-                    while (messages.size > 1000) {
-                        messages.removeAt(0)
-                    }
                 } catch (_: Exception) {
-                    Log.w("ChatPanel", "failed to parse incoming message: ${text.take(200)}")
+                    Log.w(
+                        "ChatPanel",
+                        "failed to parse incoming message: ${text.take(200)}")
                 }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                if (disposed.get()) return
                 connectionState.connected = false
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (disposed.get()) return
                 connectionState.connected = false
                 connectionState.socket = null
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (disposed.get()) return
                 connectionState.connected = false
                 connectionState.socket = null
                 scheduleReconnect()
@@ -410,12 +602,16 @@ fun ChatPanel(
         val ws = ChatSocketClient.connect(listener)
 
         onDispose {
+            disposed.set(true)
             pendingReconnectJob?.cancel()
             connectionState.connected = false
             connectionState.socket = null
             ws.close(1000, "bye")
         }
     }
+
+    // Display order for reverseLayout: newest first. asReversed() is an O(1) view.
+    val displayMessages = remember(messages) { messages.asReversed() }
 
     Column(
         modifier = modifier
@@ -455,37 +651,17 @@ fun ChatPanel(
                 .fillMaxWidth()
                 .height(180.dp)
         ) {
-            SelectionContainer {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    state = listState
-                ) {
-                    items(messages, key = { it.id }) { msg ->
-                        val messageColor = when (msg.kind) {
-                            ChatMessageKind.Normal -> MaterialTheme.colorScheme.onSurface
-                            ChatMessageKind.Like -> Color(0xFF88ff88)
-                            ChatMessageKind.System -> Color(0xff99AAAA)
-                        }
-
-                        val displayText = buildAnnotatedString {
-                            withStyle(SpanStyle(color = TIME_CODE_COLOR)) {
-                                append(formatTimeCode(msg.timestamp))
-                            }
-                            append(" ")
-                            withStyle(SpanStyle(color = messageColor)) {
-                                append(msg.text)
-                            }
-                        }
-
-                        // maxLines/overflow removed — this was clipping
-                        // long messages with an ellipsis. The Text now
-                        // wraps and grows to fit its full content.
-                        Text(
-                            text = displayText,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                state = listState,
+                reverseLayout = true
+            ) {
+                items(
+                    items = displayMessages,
+                    key = { it.id },
+                    contentType = { it.kind }
+                ) { msg ->
+                    ChatMessageRow(msg)
                 }
             }
 
@@ -497,11 +673,7 @@ fun ChatPanel(
                         .clickable {
                             newMessageCount = 0
                             stickToBottom = true
-                            coroutineScope.launch {
-                                if (messages.isNotEmpty()) {
-                                    listState.animateScrollToItem(messages.size - 1)
-                                }
-                            }
+                            scrollToNewest()
                         },
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.primary,
@@ -520,7 +692,9 @@ fun ChatPanel(
                 }
             }
 
-            if (!isAtBottom) {
+            // Also require !stickToBottom so the button doesn't flash for the
+            // instant between a new message arriving and the auto-scroll landing.
+            if (!isAtBottom && !stickToBottom) {
                 FloatingActionButton(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -528,11 +702,7 @@ fun ChatPanel(
                     onClick = {
                         stickToBottom = true
                         newMessageCount = 0
-                        coroutineScope.launch {
-                            if (messages.isNotEmpty()) {
-                                listState.animateScrollToItem(messages.size - 1)
-                            }
-                        }
+                        scrollToNewest()
                     }
                 ) {
                     Icon(
@@ -559,11 +729,7 @@ fun ChatPanel(
                             // pinned to the latest messages once the panel
                             // reflows upward.
                             stickToBottom = true
-                            coroutineScope.launch {
-                                if (messages.isNotEmpty()) {
-                                    listState.animateScrollToItem(messages.size - 1)
-                                }
-                            }
+                            scrollToNewest()
                         }
                     },
                 value = input,
@@ -590,27 +756,15 @@ fun ChatPanel(
                         val argsText = parsed?.argsText.orEmpty()
 
                         if (parsed == null || cmd !in VALID_COMMANDS) {
-                            messages.add(
-                                ChatMessage(
-                                    id = "local_${System.currentTimeMillis()}",
-                                    kind = ChatMessageKind.System,
-                                    text = "Unknown command: /$cmd",
-                                    timestamp = Instant.now().epochSecond
-                                )
-                            )
+                            store.post(listOf(
+                                localSystemMessage("Unknown command: /$cmd")))
                             input = ""
                             return@IconButton
                         }
 
                         if (cmd == "name" && argsText.isEmpty()) {
-                            messages.add(
-                                ChatMessage(
-                                    id = "local_${System.currentTimeMillis()}",
-                                    kind = ChatMessageKind.System,
-                                    text = "Usage: /name <username>",
-                                    timestamp = Instant.now().epochSecond
-                                )
-                            )
+                            store.post(listOf(
+                                localSystemMessage("Usage: /name <username>")))
                             input = ""
                             return@IconButton
                         }
@@ -632,14 +786,8 @@ fun ChatPanel(
                             // argument is sent as a plain "message" payload,
                             // never wrapped as a "command".
                             if (argsText.isEmpty()) {
-                                messages.add(
-                                    ChatMessage(
-                                        id = "local_${System.currentTimeMillis()}",
-                                        kind = ChatMessageKind.System,
-                                        text = "Usage: /say <message>",
-                                        timestamp = Instant.now().epochSecond
-                                    )
-                                )
+                                store.post(listOf(
+                                    localSystemMessage("Usage: /say <message>")))
                             } else {
                                 val sayPayload = JSONObject()
                                     .put("type", "message")
