@@ -1,4 +1,4 @@
-package net.tspigot.radio
+package net.tspigot.radio.service
 
 import android.app.PendingIntent
 import android.content.Intent
@@ -18,7 +18,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.tspigot.radio.playerwindow.MainActivity
+import net.tspigot.radio.AppConfig
+import net.tspigot.radio.data.NowPlaying
+import net.tspigot.radio.data.NowPlayingResponse
+import net.tspigot.radio.ui.activities.MainActivity
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL

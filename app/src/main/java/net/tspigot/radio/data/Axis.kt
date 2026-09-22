@@ -1,4 +1,4 @@
-package net.tspigot.radio
+package net.tspigot.radio.data
 
 data class Axis(
     val id: Int? = null,

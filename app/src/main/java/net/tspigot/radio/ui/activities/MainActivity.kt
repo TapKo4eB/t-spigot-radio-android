@@ -1,4 +1,4 @@
-package net.tspigot.radio.playerwindow
+package net.tspigot.radio.ui.activities
 
 import android.content.ComponentName
 import android.os.Bundle
@@ -15,7 +15,8 @@ import androidx.core.view.WindowCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
-import net.tspigot.radio.PlaybackService
+import net.tspigot.radio.service.PlaybackService
+import net.tspigot.radio.ui.screens.PlayerScreen
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 
 class MainActivity : ComponentActivity() {

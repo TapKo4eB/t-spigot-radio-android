@@ -1,4 +1,4 @@
-package net.tspigot.radio
+package net.tspigot.radio.ui.activities
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -34,7 +34,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import net.tspigot.radio.playerwindow.buildHistoryLine
+import net.tspigot.radio.data.BookmarkStore
+import net.tspigot.radio.data.NowPlaying
+import net.tspigot.radio.R
+import net.tspigot.radio.util.buildHistoryLine
 import net.tspigot.radio.ui.TimedToastHost
 import net.tspigot.radio.ui.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme

@@ -1,4 +1,4 @@
-package net.tspigot.radio
+package net.tspigot.radio.data
 
 import org.json.JSONObject
 

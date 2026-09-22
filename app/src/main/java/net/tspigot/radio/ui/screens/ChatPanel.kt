@@ -1,4 +1,4 @@
-package net.tspigot.radio.playerwindow
+package net.tspigot.radio.ui.screens
 
 import android.content.Context
 import android.util.Log
@@ -58,6 +58,7 @@ import kotlinx.coroutines.withContext
 import net.tspigot.radio.AppConfig
 import net.tspigot.radio.AppSettings
 import net.tspigot.radio.R
+import net.tspigot.radio.data.ChatConnectionState
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response

@@ -1,4 +1,4 @@
-package net.tspigot.radio.playerwindow
+package net.tspigot.radio.data
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

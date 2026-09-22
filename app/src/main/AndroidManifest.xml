@@ -17,7 +17,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TSpigotRadio">
         <activity
-            android:name=".playerwindow.MainActivity"
+            android:name=".ui.activities.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.TSpigotRadio"
@@ -30,7 +30,7 @@
         </activity>
 
         <service
-            android:name=".PlaybackService"
+            android:name=".service.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
@@ -40,13 +40,13 @@
         </service>
 
         <activity
-            android:name=".SettingsActivity"
+            android:name=".ui.activities.SettingsActivity"
             android:exported="false" />
         <activity
-            android:name=".HistoryActivity"
+            android:name=".ui.activities.HistoryActivity"
             android:exported="false" />
         <activity
-            android:name=".BookmarksActivity"
+            android:name=".ui.activities.BookmarksActivity"
             android:exported="false"
             android:label="@string/title_activity_bookmarks"
             android:theme="@style/Theme.TSpigotRadio"

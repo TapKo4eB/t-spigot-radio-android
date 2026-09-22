@@ -1,4 +1,4 @@
-package net.tspigot.radio
+package net.tspigot.radio.ui.activities
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import net.tspigot.radio.AppSettings
+import net.tspigot.radio.R
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 
 class SettingsActivity : ComponentActivity() {

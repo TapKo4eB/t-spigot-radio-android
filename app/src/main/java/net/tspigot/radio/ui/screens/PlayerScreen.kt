@@ -1,7 +1,8 @@
-package net.tspigot.radio.playerwindow
+package net.tspigot.radio.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.animation.AnimatedContent
@@ -76,16 +77,23 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import net.tspigot.radio.AppConfig
 import net.tspigot.radio.AppSettings
-import net.tspigot.radio.BookmarkStore
-import net.tspigot.radio.BookmarksActivity
-import net.tspigot.radio.HistoryActivity
-import net.tspigot.radio.NowPlaying
+import net.tspigot.radio.data.BookmarkStore
+import net.tspigot.radio.ui.activities.BookmarksActivity
+import net.tspigot.radio.ui.activities.HistoryActivity
+import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.R
-import net.tspigot.radio.SettingsActivity
+import net.tspigot.radio.data.ChatConnectionState
+import net.tspigot.radio.util.SongColors
+import net.tspigot.radio.util.parseSongTitle
+import net.tspigot.radio.ui.activities.SettingsActivity
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.time.Duration.Companion.seconds
 
 private const val IMAGE_FETCH_INTERVAL_SECONDS = 120L
@@ -98,8 +106,8 @@ private fun hasNetworkConnectivity(context: Context): Boolean {
     return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
 
-private suspend fun fetchSlogan(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    val connection = java.net.URL("https://radio.tspigot.net/api/slogan").openConnection() as java.net.HttpURLConnection
+private suspend fun fetchSlogan(): String = withContext(Dispatchers.IO) {
+    val connection = URL("https://radio.tspigot.net/api/slogan").openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 5000
         connection.readTimeout = 5000
@@ -118,8 +126,8 @@ private suspend fun fetchSlogan(): String = kotlinx.coroutines.withContext(kotli
     }
 }
 
-private suspend fun fetchBackgroundImageName(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    val connection = java.net.URL("https://radio.tspigot.net/api/image").openConnection() as java.net.HttpURLConnection
+private suspend fun fetchBackgroundImageName(): String = withContext(Dispatchers.IO) {
+    val connection = URL("https://radio.tspigot.net/api/image").openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 5000
         connection.readTimeout = 5000
@@ -135,10 +143,11 @@ private suspend fun fetchBackgroundImageName(): String = kotlinx.coroutines.with
     }
 }
 
-private suspend fun fetchBackgroundImageBitmap(fileName: String): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+private suspend fun fetchBackgroundImageBitmap(fileName: String): ImageBitmap? = withContext(
+    Dispatchers.IO) {
     if (fileName.isBlank()) return@withContext null
 
-    val connection = java.net.URL("https://radio.tspigot.net/images/$fileName").openConnection() as java.net.HttpURLConnection
+    val connection = URL("https://radio.tspigot.net/images/$fileName").openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 5000
         connection.readTimeout = 5000
@@ -146,7 +155,7 @@ private suspend fun fetchBackgroundImageBitmap(fileName: String): ImageBitmap? =
         connection.setRequestProperty("User-Agent", AppConfig.userAgent)
 
         val bytes = connection.inputStream.use { it.readBytes() }
-        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
     } catch (_: Exception) {
         null
     } finally {

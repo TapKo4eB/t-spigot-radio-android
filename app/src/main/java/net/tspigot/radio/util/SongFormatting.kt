@@ -1,4 +1,4 @@
-package net.tspigot.radio.playerwindow
+package net.tspigot.radio.util
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -7,7 +7,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
-import net.tspigot.radio.NowPlaying
+import net.tspigot.radio.data.NowPlaying
 import java.text.SimpleDateFormat
 import java.util.Date
 
