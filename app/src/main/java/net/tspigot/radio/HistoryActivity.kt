@@ -31,6 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import net.tspigot.radio.playerwindow.buildHistoryLine
+import net.tspigot.radio.ui.TimedToastHost
+import net.tspigot.radio.ui.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 import org.json.JSONArray
 import java.net.HttpURLConnection
@@ -89,6 +91,8 @@ fun HistoryScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var menuExpandedFor by remember { mutableStateOf<String?>(null) }
 
+    val toast = rememberTimedToastController()
+
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
@@ -116,7 +120,8 @@ fun HistoryScreen(onBack: () -> Unit) {
                     IconButton(onClick = onBack) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = "Back")
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 actions = {
@@ -138,58 +143,60 @@ fun HistoryScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        SelectionContainer {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(visibleEntries, key = { "${it.id}-${it.lastPlayEpoch}" }) { entry ->
-                    val entryKey = "${entry.id}-${entry.lastPlayEpoch}"
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            SelectionContainer {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(visibleEntries, key = { "${it.id}-${it.lastPlayEpoch}" }) { entry ->
+                        val entryKey = "${entry.id}-${entry.lastPlayEpoch}"
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth().animateItem(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = remember(entry) { buildHistoryLine(entry, timeFormat) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().animateItem(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = remember(entry) { buildHistoryLine(entry, timeFormat) },
+                                modifier = Modifier.weight(1f)
+                            )
 
-                        Box {
-                            IconButton(onClick = { menuExpandedFor = entryKey }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.more_vert),
-                                    contentDescription = "More options"
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = menuExpandedFor == entryKey,
-                                onDismissRequest = { menuExpandedFor = null }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Bookmark") },
-                                    leadingIcon = {
-                                        Icon(
-                                            painter = painterResource(R.drawable.bookmark_add),
-                                            contentDescription = null
-                                        )
-                                    },
-                                    onClick = {
-                                        menuExpandedFor = null
-                                        BookmarkStore.addBookmark(context, entry)
-                                    }
-                                )
+                            Box {
+                                IconButton(onClick = { menuExpandedFor = entryKey }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.more_vert),
+                                        contentDescription = "More options"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpandedFor == entryKey,
+                                    onDismissRequest = { menuExpandedFor = null }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Bookmark") },
+                                        leadingIcon = {
+                                            Icon(
+                                                painter = painterResource(R.drawable.bookmark_add),
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            menuExpandedFor = null
+                                            val added = BookmarkStore.addBookmark(context, entry)
+                                            toast.show(if (added) "Song bookmarked" else "Song already bookmarked")
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                TimedToastHost(
+                    controller = toast,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
+                )
             }
         }
     }
-
-
 }

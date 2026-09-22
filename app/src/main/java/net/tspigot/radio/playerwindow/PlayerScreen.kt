@@ -76,6 +76,7 @@ import androidx.media3.session.MediaController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.AppSettings
 import net.tspigot.radio.BookmarkStore
 import net.tspigot.radio.BookmarksActivity
 import net.tspigot.radio.HistoryActivity
@@ -569,7 +570,7 @@ fun PlayerScreen(
                                     chatConnection.sendUserPayload(context, payload.json)
 
                             if (sent) {
-                                if (!isFavorited) {
+                                if (AppSettings.getBookmarkOnLike(context)) {
                                     BookmarkStore.addBookmark(
                                         context,
                                         NowPlaying(

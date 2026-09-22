@@ -40,6 +40,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.tspigot.radio.playerwindow.buildHistoryLine
+import net.tspigot.radio.ui.TimedToastHost
+import net.tspigot.radio.ui.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -83,40 +85,28 @@ fun BookmarksScreen(onBack: () -> Unit) {
         BookmarkStore.saveBookmarks(context, newEntries)
     }
 
+    val toast = rememberTimedToastController()
+
+    fun undoRemoval(removed: List<IndexedValue<NowPlaying>>) {
+        val restored = entries.toMutableList()
+        removed.sortedBy { it.index }.forEach { (index, track) ->
+            restored.add(index.coerceIn(0, restored.size), track)
+        }
+        persist(restored)
+    }
+
     fun removeBookmarks(toRemove: List<NowPlaying>) {
         if (toRemove.isEmpty()) return
-
-        dismissJob?.cancel()
-        undoState = null
 
         val removedKeys = toRemove.map { it.bookmarkKey() }.toSet()
         val removedWithIndex = entries.withIndex().filter { it.value.bookmarkKey() in removedKeys }
         persist(entries.filterNot { it.bookmarkKey() in removedKeys })
 
-        undoState = UndoState(
+        toast.show(
             message = if (toRemove.size == 1) "Bookmark removed" else "${toRemove.size} bookmarks removed",
-            removed = removedWithIndex
+            actionLabel = "Undo",
+            onAction = { undoRemoval(removedWithIndex) }
         )
-
-        dismissJob = scope.launch {
-            undoProgress.snapTo(1f)
-            undoProgress.animateTo(
-                0f,
-                animationSpec = tween(5000, easing = LinearEasing))
-            undoState = null
-        }
-    }
-
-    fun undoRemoval() {
-        val state = undoState ?: return
-        dismissJob?.cancel()
-        undoState = null
-
-        val restored = entries.toMutableList()
-        state.removed.sortedBy { it.index }.forEach { (index, track) ->
-            restored.add(index.coerceIn(0, restored.size), track)
-        }
-        persist(restored)
     }
 
     Scaffold(
@@ -247,50 +237,10 @@ fun BookmarksScreen(onBack: () -> Unit) {
                 }
             }
 
-
-            AnimatedVisibility(
-                visible = undoState != null,
-                enter = fadeIn() + slideInVertically { it },
-                exit = fadeOut() + slideOutVertically { it },
+            TimedToastHost(
+                controller = toast,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF323232),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = undoState?.message.orEmpty(),
-                                color = Color.White,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = { undoRemoval() }) {
-                                Text("Undo")
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .background(Color.White.copy(alpha = 0.15f))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(fraction = undoProgress.value.coerceIn(0f, 1f))
-                                    .fillMaxHeight()
-                                    .align(Alignment.CenterStart)
-                                    .background(Color.White)
-                            )
-                        }
-                    }
-                }
-            }
+            )
         }
     }
 }

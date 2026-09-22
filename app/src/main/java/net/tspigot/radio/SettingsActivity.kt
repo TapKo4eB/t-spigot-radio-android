@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -13,9 +12,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -23,14 +22,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
 
 class SettingsActivity : ComponentActivity() {
@@ -38,7 +36,6 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // Wrap in the same theme you use in MainActivity, e.g. RadioTheme { ... }
             TSpigotRadioTheme {
                 SettingsScreen(onBack = { finish() })
             }
@@ -52,6 +49,8 @@ private fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var chatName by remember { mutableStateOf(AppSettings.getChatName(context)) }
     var showDialog by remember { mutableStateOf(false) }
+    var bookmarkOnLike by remember { mutableStateOf(AppSettings.getBookmarkOnLike(context)) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
         topBar = {
@@ -68,29 +67,45 @@ private fun SettingsScreen(onBack: () -> Unit) {
         }
     ) { padding ->
         Column(Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = 0) {
-                Tab(selected = true, onClick = {}, text = { Text("Chat") })
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Chat") })
+                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Interface") })
             }
 
-            ListItem(
-                headlineContent = { Text("Set chat name") },
-                supportingContent = { Text(chatName.ifBlank { "Not set" }) },
-                trailingContent = {
-                    IconButton(
-                        enabled = chatName.isNotEmpty(),
-                        onClick = {
-                            AppSettings.setChatName(context, "")
-                            chatName = ""
+            if (selectedTab == 0) {
+                ListItem(
+                    headlineContent = { Text("Set chat name") },
+                    supportingContent = { Text(chatName.ifBlank { "Not set" }) },
+                    trailingContent = {
+                        IconButton(
+                            enabled = chatName.isNotEmpty(),
+                            onClick = {
+                                AppSettings.setChatName(context, "")
+                                chatName = ""
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.undo),
+                                contentDescription = "Reset chat name"
+                            )
                         }
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.undo),
-                            contentDescription = "Reset chat name"
+                    },
+                    modifier = Modifier.clickable { showDialog = true }
+                )
+            } else {
+                ListItem(
+                    headlineContent = { Text("Bookmark songs on like") },
+                    trailingContent = {
+                        Switch(
+                            checked = bookmarkOnLike,
+                            onCheckedChange = {
+                                bookmarkOnLike = it
+                                AppSettings.setBookmarkOnLike(context, it)
+                            }
                         )
                     }
-                },
-                modifier = Modifier.clickable { showDialog = true }
-            )
+                )
+            }
         }
     }
 
