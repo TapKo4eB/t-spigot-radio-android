@@ -76,7 +76,10 @@ import androidx.media3.session.MediaController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.tspigot.radio.AppConfig
+import net.tspigot.radio.BookmarkStore
+import net.tspigot.radio.BookmarksActivity
 import net.tspigot.radio.HistoryActivity
+import net.tspigot.radio.NowPlaying
 import net.tspigot.radio.R
 import net.tspigot.radio.SettingsActivity
 import kotlin.time.Duration.Companion.seconds
@@ -499,6 +502,19 @@ fun PlayerScreen(
                             contentDescription = "History"
                         )
                     }
+
+                    IconButton(
+                        onClick = {
+                            context.startActivity(Intent(
+                                context,
+                                BookmarksActivity::class.java))
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.bookmarks),
+                            contentDescription = "Bookmarks"
+                        )
+                    }
                 }
             }
 
@@ -548,13 +564,21 @@ fun PlayerScreen(
                     IconButton(
                         enabled = chatConnection.connected,
                         onClick = {
-                            // Always re-send "/like" on every press, even if
-                            // already favorited — the action stays the same.
                             val payload = buildOutgoingPayload("/like")
                             val sent = payload != null &&
                                     chatConnection.sendUserPayload(context, payload.json)
 
                             if (sent) {
+                                if (!isFavorited) {
+                                    BookmarkStore.addBookmark(
+                                        context,
+                                        NowPlaying(
+                                            title = mainTitle,
+                                            artist = mainArtist,
+                                            lastPlayEpoch = System.currentTimeMillis() / 1000
+                                        )
+                                    )
+                                }
                                 isFavorited = true
                             }
                         }

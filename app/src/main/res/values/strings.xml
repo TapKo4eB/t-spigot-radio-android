@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">t spigot radio</string>
+    <string name="title_activity_bookmarks">BookmarksActivity</string>
 </resources>

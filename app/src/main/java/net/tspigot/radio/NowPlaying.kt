@@ -26,6 +26,20 @@ data class NowPlaying(
     val country: String? = null,
     val valence: Int? = null
 ) {
+    fun bookmarkKey(): String = "$title-$artist-$lastPlayEpoch"
+    fun toJson(): JSONObject = JSONObject().apply {
+        id?.let { put("id", it) }
+        album?.let { put("album", it) }
+        artist?.let { put("artist", it) }
+        artistId?.let { put("artistId", it) }
+        duration?.let { put("duration", it) }
+        lastPlayEpoch?.let { put("lastPlayEpoch", it) }
+        path?.let { put("path", it) }
+        title?.let { put("title", it) }
+        type?.let { put("type", it) }
+        year?.let { put("year", it) }
+        country?.let { put("country", it) }
+    }
     companion object {
         fun fromJson(o: JSONObject): NowPlaying = NowPlaying(
             id = if (o.has("id")) o.optInt("id") else null,
@@ -41,4 +55,5 @@ data class NowPlaying(
             country = o.optString("country").ifEmpty { null }
         )
     }
+
 }

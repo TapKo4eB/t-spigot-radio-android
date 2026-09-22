@@ -45,6 +45,12 @@
         <activity
             android:name=".HistoryActivity"
             android:exported="false" />
+        <activity
+            android:name=".BookmarksActivity"
+            android:exported="false"
+            android:label="@string/title_activity_bookmarks"
+            android:theme="@style/Theme.TSpigotRadio"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>
