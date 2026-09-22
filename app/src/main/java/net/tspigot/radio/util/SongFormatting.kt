@@ -1,5 +1,9 @@
 package net.tspigot.radio.util
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -41,25 +45,31 @@ fun parseSongTitle(title: String): Pair<String, String?> {
     }
 }
 
-fun buildHistoryLine(track: NowPlaying, timeFormat: SimpleDateFormat): AnnotatedString =
+@Composable
+fun HistoryLine(track: NowPlaying, timeFormat: SimpleDateFormat, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(text = buildTitleLine(track, timeFormat))
+        if (!track.artist.isNullOrBlank()) {
+            Text(text = buildArtistLine(track))
+        }
+    }
+}
+
+fun buildTitleLine(track: NowPlaying, timeFormat: SimpleDateFormat): AnnotatedString =
     buildAnnotatedString {
         track.lastPlayEpoch?.let { epochSeconds ->
             withStyle(SongStyles.Timestamp) { append(timeFormat.format(Date(epochSeconds * 1000))) }
             append("  ")
         }
-
         val (title, bracket) = parseSongTitle(track.title.orEmpty())
         withStyle(SongStyles.Title) { append(title) }
-
         if (bracket != null) {
             append(" ")
             withStyle(SongStyles.Bracket) { append(bracket) }
         }
+    }
 
-        if (!track.artist.isNullOrBlank()) {
-            append(" ")
-            withStyle(SongStyles.Artist) { append("\nby ${track.artist}") }
-        }
-
-
+fun buildArtistLine(track: NowPlaying): AnnotatedString =
+    buildAnnotatedString {
+        withStyle(SongStyles.Artist) { append("by ${track.artist}") }
     }

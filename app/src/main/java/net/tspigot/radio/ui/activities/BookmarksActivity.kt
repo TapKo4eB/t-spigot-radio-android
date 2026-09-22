@@ -37,10 +37,10 @@ import androidx.compose.ui.unit.dp
 import net.tspigot.radio.data.BookmarkStore
 import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.R
-import net.tspigot.radio.util.buildHistoryLine
 import net.tspigot.radio.ui.TimedToastHost
 import net.tspigot.radio.ui.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
+import net.tspigot.radio.util.HistoryLine
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -188,10 +188,8 @@ fun BookmarksScreen(onBack: () -> Unit) {
                             )
                         }
 
-                        Text(
-                            text = remember(entry) { buildHistoryLine(entry, timeFormat) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        HistoryLine(entry, timeFormat, Modifier.weight(1f))
+
 
                         if (!selectionMode) {
                             Box {

@@ -34,10 +34,10 @@ import net.tspigot.radio.AppConfig
 import net.tspigot.radio.data.BookmarkStore
 import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.R
-import net.tspigot.radio.util.buildHistoryLine
 import net.tspigot.radio.ui.TimedToastHost
 import net.tspigot.radio.ui.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
+import net.tspigot.radio.util.HistoryLine
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
@@ -161,10 +161,7 @@ fun HistoryScreen(onBack: () -> Unit) {
                             modifier = Modifier.fillMaxWidth().animateItem(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = remember(entry) { buildHistoryLine(entry, timeFormat) },
-                                modifier = Modifier.weight(1f)
-                            )
+                            HistoryLine(entry, timeFormat, Modifier.weight(1f))
 
                             Box {
                                 IconButton(onClick = { menuExpandedFor = entryKey }) {
