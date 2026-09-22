@@ -51,13 +51,15 @@ fun buildHistoryLine(track: NowPlaying, timeFormat: SimpleDateFormat): Annotated
         val (title, bracket) = parseSongTitle(track.title.orEmpty())
         withStyle(SongStyles.Title) { append(title) }
 
-        if (!track.artist.isNullOrBlank()) {
-            append(" ")
-            withStyle(SongStyles.Artist) { append("by ${track.artist}") }
-        }
-
         if (bracket != null) {
             append(" ")
             withStyle(SongStyles.Bracket) { append(bracket) }
         }
+
+        if (!track.artist.isNullOrBlank()) {
+            append(" ")
+            withStyle(SongStyles.Artist) { append("\nby ${track.artist}") }
+        }
+
+
     }
