@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -24,6 +25,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -286,8 +289,32 @@ private fun SongInfoDisplay(
 }
 
 private fun fadeTitleTransition(): ContentTransform =
-    (fadeIn(tween(3000)) + slideInVertically(tween(3000)) { height -> height / 4 })
-        .togetherWith(fadeOut(tween(2000)) + slideOutVertically(tween(2000)) { height -> -height / 4 })
+    (fadeIn(tween(3000))
+            + slideInVertically(tween(3000))
+    { height -> height / 4 })
+        .togetherWith(fadeOut(tween(2000))
+                + slideOutVertically(tween(2000))
+        { height -> -height / 4 })
+
+@Composable
+private fun BoxScope.FloatingBookmarkIcon(onFinished: () -> Unit) {
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f,
+            animationSpec = tween(durationMillis = 1200, easing = LinearOutSlowInEasing))
+        onFinished()
+    }
+
+    Icon(
+        painter = painterResource(id = R.drawable.bookmark_add),
+        contentDescription = null,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .offset(y = (-8f - progress.value * 40f).dp)
+            .graphicsLayer(alpha = 1f - progress.value)
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -332,6 +359,7 @@ fun PlayerScreen(
     // but this button also needs to send over it.
     val chatConnection = remember { ChatConnectionState() }
     var isFavorited by remember { mutableStateOf(false) }
+    var floatingBookmarkIds by remember { mutableStateOf<List<Long>>(emptyList()) }
 
     // Reset the favorite state whenever the *main* track changes.
     // otherTracks is intentionally excluded from this key.
@@ -562,38 +590,52 @@ fun PlayerScreen(
                         )
                     }
 
-                    IconButton(
-                        enabled = chatConnection.connected,
-                        onClick = {
-                            val payload = buildOutgoingPayload("/like")
-                            val sent = payload != null &&
-                                    chatConnection.sendUserPayload(context, payload.json)
+                    Box {
+                        IconButton(
+                            enabled = chatConnection.connected,
+                            onClick = {
+                                if(!isFavorited) {
+                                    val payload = buildOutgoingPayload("/like")
+                                    val sent = payload != null &&
+                                            chatConnection.sendUserPayload(context, payload.json)
 
-                            if (sent) {
-                                if (AppSettings.getBookmarkOnLike(context)) {
-                                    BookmarkStore.addBookmark(
-                                        context,
-                                        NowPlaying(
-                                            title = mainTitle,
-                                            artist = mainArtist,
-                                            lastPlayEpoch = System.currentTimeMillis() / 1000
-                                        )
-                                    )
+                                    if (sent) {
+                                        if (AppSettings.getBookmarkOnLike(context)) {
+                                            val added = BookmarkStore.addBookmark(
+                                                context,
+                                                NowPlaying(
+                                                    title = mainTitle,
+                                                    artist = mainArtist,
+                                                    lastPlayEpoch = System.currentTimeMillis() / 1000
+                                                )
+                                            )
+                                            if (added) {
+                                                floatingBookmarkIds = floatingBookmarkIds + System.nanoTime()
+                                            }
+                                        }
+                                        isFavorited = true
+                                    }
                                 }
-                                isFavorited = true
+
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (isFavorited) {
+                                        R.drawable.favorite_filled
+                                    } else {
+                                        R.drawable.favorite
+                                    }
+                                ),
+                                contentDescription = if (isFavorited) "Liked" else "Like"
+                            )
+                        }
+
+                        floatingBookmarkIds.forEach { id ->
+                            key(id) {
+                                FloatingBookmarkIcon(onFinished = { floatingBookmarkIds = floatingBookmarkIds - id })
                             }
                         }
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                id = if (isFavorited) {
-                                    R.drawable.favorite_filled
-                                } else {
-                                    R.drawable.favorite
-                                }
-                            ),
-                            contentDescription = if (isFavorited) "Liked" else "Like"
-                        )
                     }
                 }
 
