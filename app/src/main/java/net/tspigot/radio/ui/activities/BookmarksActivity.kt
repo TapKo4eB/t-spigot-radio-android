@@ -3,6 +3,7 @@ package net.tspigot.radio.ui.activities
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -31,69 +32,71 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import net.tspigot.radio.data.BookmarkStore
-import net.tspigot.radio.data.NowPlaying
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.text.SimpleDateFormat
+import java.util.Locale
 import net.tspigot.radio.R
+import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.ui.screens.TimedToastHost
 import net.tspigot.radio.ui.screens.rememberTimedToastController
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
+import net.tspigot.radio.ui.viewmodel.BookmarksUiState
+import net.tspigot.radio.ui.viewmodel.BookmarksViewModel
 import net.tspigot.radio.util.HistoryLine
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class BookmarksActivity : ComponentActivity() {
+    private val viewModel: BookmarksViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
             TSpigotRadioTheme {
-                BookmarksScreen(onBack = { finish() })
+                BookmarksScreen(
+                    state = state,
+                    onSelect = viewModel::select,
+                    onRemove = viewModel::remove,
+                    onUndoRemoval = viewModel::undoRemoval,
+                    onBack = { finish() }
+                )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.refresh()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun BookmarksScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-
-    var entries by remember { mutableStateOf(BookmarkStore.getBookmarks(context)) }
-    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
+fun BookmarksScreen(
+    state: BookmarksUiState,
+    onSelect: (Set<String>) -> Unit,
+    onRemove: (List<NowPlaying>) -> List<IndexedValue<NowPlaying>>,
+    onUndoRemoval: (List<IndexedValue<NowPlaying>>) -> Unit,
+    onBack: () -> Unit
+) {
+    val entries = state.entries
+    val selectedKeys = state.selectedKeys
     var menuExpandedFor by remember { mutableStateOf<String?>(null) }
     var bulkMenuExpanded by remember { mutableStateOf(false) }
 
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val selectionMode = selectedKeys.isNotEmpty()
 
-    fun persist(newEntries: List<NowPlaying>) {
-        entries = newEntries
-        BookmarkStore.saveBookmarks(context, newEntries)
-    }
-
     val toast = rememberTimedToastController()
 
-    fun undoRemoval(removed: List<IndexedValue<NowPlaying>>) {
-        val restored = entries.toMutableList()
-        removed.sortedBy { it.index }.forEach { (index, track) ->
-            restored.add(index.coerceIn(0, restored.size), track)
-        }
-        persist(restored)
-    }
-
     fun removeBookmarks(toRemove: List<NowPlaying>) {
-        if (toRemove.isEmpty()) return
-
-        val removedKeys = toRemove.map { it.bookmarkKey() }.toSet()
-        val removedWithIndex = entries.withIndex().filter { it.value.bookmarkKey() in removedKeys }
-        persist(entries.filterNot { it.bookmarkKey() in removedKeys })
-
+        val removed = onRemove(toRemove)
+        if (removed.isEmpty()) return
         toast.show(
-            message = if (toRemove.size == 1) "Bookmark removed" else "${toRemove.size} bookmarks removed",
+            message = if (removed.size == 1) "Bookmark removed" else "${removed.size} bookmarks removed",
             actionLabel = "Undo",
-            onAction = { undoRemoval(removedWithIndex) }
+            onAction = { onUndoRemoval(removed) }
         )
     }
 
@@ -103,7 +106,7 @@ fun BookmarksScreen(onBack: () -> Unit) {
                 title = { Text(if (selectionMode) "${selectedKeys.size} selected" else "Bookmarks") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (selectionMode) selectedKeys = emptySet() else onBack()
+                        if (selectionMode) onSelect(emptySet()) else onBack()
                     }) {
                         Icon(
                             painter = painterResource(
@@ -137,7 +140,7 @@ fun BookmarksScreen(onBack: () -> Unit) {
                                     onClick = {
                                         bulkMenuExpanded = false
                                         val toRemove = entries.filter { it.bookmarkKey() in selectedKeys }
-                                        selectedKeys = emptySet()
+                                        onSelect(emptySet())
                                         removeBookmarks(toRemove)
                                     }
                                 )
@@ -165,12 +168,14 @@ fun BookmarksScreen(onBack: () -> Unit) {
                             .combinedClickable(
                                 onClick = {
                                     if (selectionMode) {
-                                        selectedKeys = if (selected) selectedKeys - entryKey
-                                        else selectedKeys + entryKey
+                                        onSelect(
+                                            if (selected) selectedKeys - entryKey
+                                            else selectedKeys + entryKey
+                                        )
                                     }
                                 },
                                 onLongClick = {
-                                    if (!selectionMode) selectedKeys = setOf(entryKey)
+                                    if (!selectionMode) onSelect(setOf(entryKey))
                                 }
                             )
                             .background(if (selected) Color(0xFF2A2A2A) else Color.Transparent)

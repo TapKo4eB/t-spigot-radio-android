@@ -8,3 +8,15 @@ can't do. still in pre-release. but you can go grab an artifact from latest comm
 
 # how 2 building
 download android studio, pull project, build.
+
+# screen state and orientation
+Activity-scoped ViewModels own player, chat, history, bookmarks, and settings state.
+The media controller and chat socket survive activity recreation and are released
+when their ViewModels are cleared. Network polling runs in `viewModelScope`;
+history polling pauses when its activity stops. Composables receive state and
+callbacks and keep animation, menus, and scrolling local.
+
+All activities request portrait orientation. Android 17 (the app targets API 37)
+ignores orientation restrictions on large screens of at least 600dp, so a
+portrait-only layout cannot be enforced there by the manifest.
+See [Android's orientation restrictions](https://developer.android.com/about/versions/17/behavior-changes-17#large-screens).

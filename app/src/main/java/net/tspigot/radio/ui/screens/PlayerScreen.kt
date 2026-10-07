@@ -1,10 +1,7 @@
 package net.tspigot.radio.ui.screens
 
-import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
@@ -46,7 +43,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -57,7 +53,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -73,107 +68,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
-import net.tspigot.radio.AppConfig
-import net.tspigot.radio.AppSettings
-import net.tspigot.radio.data.BookmarkStore
 import net.tspigot.radio.ui.activities.BookmarksActivity
 import net.tspigot.radio.ui.activities.HistoryActivity
-import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.R
-import net.tspigot.radio.data.ChatConnectionState
+import net.tspigot.radio.ui.viewmodel.PlayerUiState
+import net.tspigot.radio.ui.viewmodel.ChatUiState
 import net.tspigot.radio.util.SongColors
 import net.tspigot.radio.util.parseSongTitle
 import net.tspigot.radio.ui.activities.SettingsActivity
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.time.Duration.Companion.seconds
 
-private const val IMAGE_FETCH_INTERVAL_SECONDS = 120L
 private const val IMAGE_FADE_DURATION_MS = 5000
-
-private fun hasNetworkConnectivity(context: Context): Boolean {
-    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val activeNetwork = cm.activeNetwork ?: return false
-    val caps = cm.getNetworkCapabilities(activeNetwork) ?: return false
-    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-}
-
-private suspend fun fetchSlogan(): String = withContext(Dispatchers.IO) {
-    val connection = URL("https://radio.tspigot.net/api/slogan").openConnection() as HttpURLConnection
-    try {
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-        connection.requestMethod = "GET"
-        connection.setRequestProperty("Accept", "text/plain, application/json")
-        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
-
-        val response = connection.inputStream.bufferedReader().use { it.readText().trim() }
-        if (response.isBlank()) return@withContext ""
-
-        response
-    } catch (_: Exception) {
-        ""
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private suspend fun fetchBackgroundImageName(): String = withContext(Dispatchers.IO) {
-    val connection = URL("https://radio.tspigot.net/api/image").openConnection() as HttpURLConnection
-    try {
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-        connection.requestMethod = "GET"
-        connection.setRequestProperty("Accept", "text/plain")
-        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
-
-        connection.inputStream.bufferedReader().use { it.readText().trim() }
-    } catch (_: Exception) {
-        ""
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private suspend fun fetchBackgroundImageBitmap(fileName: String): ImageBitmap? = withContext(
-    Dispatchers.IO) {
-    if (fileName.isBlank()) return@withContext null
-
-    val connection = URL("https://radio.tspigot.net/images/$fileName").openConnection() as HttpURLConnection
-    try {
-        connection.connectTimeout = 5000
-        connection.readTimeout = 5000
-        connection.requestMethod = "GET"
-        connection.setRequestProperty("User-Agent", AppConfig.userAgent)
-
-        val bytes = connection.inputStream.use { it.readBytes() }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-    } catch (_: Exception) {
-        null
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private fun parseOtherTracks(description: String): List<Pair<String, String>> {
-    if (!description.startsWith("MULTI:")) return emptyList()
-
-    return description.substring(6)
-        .split(";;")
-        .filter { it.isNotBlank() }
-        .mapNotNull { entry ->
-            val parts = entry.split("|")
-            if (parts.size == 2) parts[0] to parts[1] else null
-        }
-}
 
 @Composable
 private fun SongInfoDisplay(
@@ -328,7 +232,13 @@ private fun BoxScope.FloatingBookmarkIcon(onFinished: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerScreen(
-    controller: MediaController?,
+    state: PlayerUiState,
+    chatState: ChatUiState,
+    onTogglePlayback: () -> Unit,
+    onLike: () -> Boolean,
+    onChatInputChange: (String) -> Unit,
+    onSendChat: () -> Unit,
+    onReconnectChat: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -351,112 +261,34 @@ fun PlayerScreen(
         label = "sloganBackgroundAlpha"
     )
 
-    var userWantsPlaying by remember { mutableStateOf(false) }
-    var mainTitle by remember { mutableStateOf("t spigot radio") }
-    var mainArtist by remember { mutableStateOf("only real music") }
-    var otherTracks by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
+    val userWantsPlaying = state.userWantsPlaying
+    val mainTitle = state.mainTitle
+    val mainArtist = state.mainArtist
+    val otherTracks = state.otherTracks
+    val statusMessage = state.statusMessage
+    val isFavorited = state.isFavorited
 
     val sloganAlpha = remember { Animatable(0f) }
 
-    // Currently playing background image, fetched from the API every
-    // IMAGE_FETCH_INTERVAL_SECONDS and crossfaded in/out over IMAGE_FADE_DURATION_MS.
-    var backgroundImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    // Keep crossfade animation state local; image fetching belongs to the ViewModel.
+    var backgroundImage by remember { mutableStateOf<Bitmap?>(null) }
     val backgroundImageAlpha = remember { Animatable(0f) }
 
-    // Shared connection state: ChatPanel owns the socket lifecycle,
-    // but this button also needs to send over it.
-    val chatConnection = remember { ChatConnectionState() }
-    var isFavorited by remember { mutableStateOf(false) }
     var floatingBookmarkIds by remember { mutableStateOf<List<Long>>(emptyList()) }
 
-    // Reset the favorite state whenever the *main* track changes.
-    // otherTracks is intentionally excluded from this key.
-    LaunchedEffect(mainTitle, mainArtist) {
-        isFavorited = false
+    LaunchedEffect(state.slogan) {
+        sloganAlpha.animateTo(0f, animationSpec = tween(durationMillis = 3500))
+        sloganText = state.slogan
+        sloganAlpha.animateTo(1f, animationSpec = tween(durationMillis = 3500))
     }
 
-    LaunchedEffect(controller) {
-        userWantsPlaying = controller?.isPlaying == true
-    }
-
-    LaunchedEffect(Unit) {
-        sloganText = ""
-        sloganAlpha.snapTo(0f)
-
-        while (isActive) {
-            val newSlogan = fetchSlogan()
-
-            sloganAlpha.animateTo(0f, animationSpec = tween(durationMillis = 3500))
-            sloganText = newSlogan
-            sloganAlpha.animateTo(1f, animationSpec = tween(durationMillis = 3500))
-
-            delay(90.seconds)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            val imageName = fetchBackgroundImageName()
-            if (imageName.isNotBlank()) {
-                val bitmap = fetchBackgroundImageBitmap(imageName)
-                if (bitmap != null) {
-                    if (backgroundImage != null) {
-                        backgroundImageAlpha.animateTo(0f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
-                    }
-                    backgroundImage = bitmap
-                    backgroundImageAlpha.animateTo(0.5f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
-                }
+    LaunchedEffect(state.backgroundImage) {
+        state.backgroundImage?.let { image ->
+            if (backgroundImage != null) {
+                backgroundImageAlpha.animateTo(0f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
             }
-
-            delay(IMAGE_FETCH_INTERVAL_SECONDS.seconds)
-        }
-    }
-
-    DisposableEffect(controller) {
-        if (controller == null) {
-            onDispose { }
-        } else {
-            mainTitle = controller.mediaMetadata.title?.toString() ?: "t spigot radio"
-            mainArtist = controller.mediaMetadata.artist?.toString() ?: "only real music"
-            otherTracks = parseOtherTracks(controller.mediaMetadata.description?.toString() ?: "")
-
-            val listener = object : Player.Listener {
-                override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
-                    mainTitle = mediaMetadata.title?.toString() ?: "t spigot radio"
-                    mainArtist = mediaMetadata.artist?.toString() ?: "only real music"
-                    otherTracks = parseOtherTracks(mediaMetadata.description?.toString() ?: "")
-                }
-
-                override fun onIsPlayingChanged(isPlayingNow: Boolean) {
-                    if (isPlayingNow) {
-                        statusMessage = null
-                    } else if (userWantsPlaying) {
-                        val hasNetwork = hasNetworkConnectivity(context)
-                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
-                    }
-                }
-
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_BUFFERING && userWantsPlaying) {
-                        val hasNetwork = hasNetworkConnectivity(context)
-                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    if (userWantsPlaying) {
-                        val hasNetwork = hasNetworkConnectivity(context)
-                        statusMessage = if (hasNetwork) "Reconnecting..." else "No network available"
-                    }
-                }
-            }
-
-            controller.addListener(listener)
-
-            onDispose {
-                controller.removeListener(listener)
-            }
+            backgroundImage = image
+            backgroundImageAlpha.animateTo(0.5f, animationSpec = tween(IMAGE_FADE_DURATION_MS))
         }
     }
 
@@ -475,7 +307,8 @@ fun PlayerScreen(
                 .weight(1f)
                 .fillMaxSize()
         ) {
-            backgroundImage?.let { bitmap ->
+            backgroundImage?.let { image ->
+                val bitmap = remember(image) { image.asImageBitmap() }
                 Image(
                     bitmap = bitmap,
                     contentDescription = null,
@@ -575,27 +408,12 @@ fun PlayerScreen(
                 ) {
                     Button(
                         modifier = modifier,
-                        enabled = controller != null,
-                        onClick = {
-                            controller?.let {
-                                userWantsPlaying = !userWantsPlaying
-                                statusMessage = null
-
-                                // Discard buffered audio, including before the first Play.
-                                it.playWhenReady = false
-                                it.stop()
-                                it.seekToDefaultPosition()
-
-                                if (userWantsPlaying) {
-                                    it.prepare()
-                                    it.play()
-                                }
-                            }
-                        }
+                        enabled = state.connected,
+                        onClick = onTogglePlayback
                     ) {
                         Text(
                             text = when {
-                                controller == null -> "Connecting..."
+                                !state.connected -> "Connecting..."
                                 userWantsPlaying -> "Pause"
                                 else -> "Play"
                             }
@@ -604,31 +422,11 @@ fun PlayerScreen(
 
                     Box {
                         IconButton(
-                            enabled = chatConnection.connected,
+                            enabled = chatState.connected,
                             onClick = {
-                                if(!isFavorited) {
-                                    val payload = buildOutgoingPayload("/like")
-                                    val sent = payload != null &&
-                                            chatConnection.sendUserPayload(context, payload.json)
-
-                                    if (sent) {
-                                        if (AppSettings.getBookmarkOnLike(context)) {
-                                            val added = BookmarkStore.addBookmark(
-                                                context,
-                                                NowPlaying(
-                                                    title = mainTitle,
-                                                    artist = mainArtist,
-                                                    lastPlayEpoch = System.currentTimeMillis() / 1000
-                                                )
-                                            )
-                                            if (added) {
-                                                floatingBookmarkIds = floatingBookmarkIds + System.nanoTime()
-                                            }
-                                        }
-                                        isFavorited = true
-                                    }
+                                if (onLike()) {
+                                    floatingBookmarkIds = floatingBookmarkIds + System.nanoTime()
                                 }
-
                             }
                         ) {
                             Icon(
@@ -653,13 +451,16 @@ fun PlayerScreen(
 
                 if (statusMessage != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = statusMessage!!)
+                    Text(text = statusMessage)
                 }
             }
         }
 
         ChatPanel(
-            connectionState = chatConnection,
+            state = chatState,
+            onInputChange = onChatInputChange,
+            onSend = onSendChat,
+            onReconnect = onReconnectChat,
             modifier = Modifier
                 .padding(horizontal = 12.dp)
                 .padding(bottom = 12.dp)

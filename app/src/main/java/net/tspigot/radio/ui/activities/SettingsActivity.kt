@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,32 +26,50 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import net.tspigot.radio.AppSettings
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.tspigot.radio.R
 import net.tspigot.radio.ui.theme.TSpigotRadioTheme
+import net.tspigot.radio.ui.viewmodel.SettingsUiState
+import net.tspigot.radio.ui.viewmodel.SettingsViewModel
 
 class SettingsActivity : ComponentActivity() {
+    private val viewModel: SettingsViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
             TSpigotRadioTheme {
-                SettingsScreen(onBack = { finish() })
+                SettingsScreen(
+                    state = state,
+                    onSetChatName = viewModel::setChatName,
+                    onSetBookmarkOnLike = viewModel::setBookmarkOnLike,
+                    onBack = { finish() }
+                )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.refresh()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    var chatName by remember { mutableStateOf(AppSettings.getChatName(context)) }
+private fun SettingsScreen(
+    state: SettingsUiState,
+    onSetChatName: (String) -> Unit,
+    onSetBookmarkOnLike: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    val chatName = state.chatName
     var showDialog by remember { mutableStateOf(false) }
-    var bookmarkOnLike by remember { mutableStateOf(AppSettings.getBookmarkOnLike(context)) }
+    val bookmarkOnLike = state.bookmarkOnLike
 
     Scaffold(
         topBar = {
@@ -77,8 +96,7 @@ private fun SettingsScreen(onBack: () -> Unit) {
                         IconButton(
                             enabled = chatName.isNotEmpty(),
                             onClick = {
-                                AppSettings.setChatName(context, "")
-                                chatName = ""
+                                onSetChatName("")
                             }
                         ) {
                             Icon(
@@ -98,10 +116,7 @@ private fun SettingsScreen(onBack: () -> Unit) {
                     trailingContent = {
                         Switch(
                             checked = bookmarkOnLike,
-                            onCheckedChange = {
-                                bookmarkOnLike = it
-                                AppSettings.setBookmarkOnLike(context, it)
-                            }
+                            onCheckedChange = onSetBookmarkOnLike
                         )
                     }
                 )
@@ -123,8 +138,7 @@ private fun SettingsScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    AppSettings.setChatName(context, draft)
-                    chatName = draft.trim()
+                    onSetChatName(draft)
                     showDialog = false
                 }) { Text("Save") }
             },
