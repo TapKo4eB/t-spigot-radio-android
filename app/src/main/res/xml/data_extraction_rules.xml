@@ -1,38 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="file">
-            <include path="." />
-        </include>
-
-        <include domain="database">
-            <include path="." />
-        </include>
-
-        <include domain="sharedpref">
-            <include path="." />
-        </include>
-
-        <include domain="external">
-            <include path="." />
-        </include>
+        <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="device.xml"/>
     </cloud-backup>
-
-    <device-transfer>
-        <include domain="file">
-            <include path="." />
-        </include>
-
-        <include domain="database">
-            <include path="." />
-        </include>
-
-        <include domain="sharedpref">
-            <include path="." />
-        </include>
-
-        <include domain="external">
-            <include path="." />
-        </include>
-    </device-transfer>
 </data-extraction-rules>
