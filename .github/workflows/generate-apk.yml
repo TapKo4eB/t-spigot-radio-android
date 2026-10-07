@@ -10,7 +10,7 @@ on:
       - 'gradle/**'
       - 'build.gradle'
       - 'settings.gradle'
-      - '.github/workflows/build.yml'
+      - '.github/workflows/generate-apk.yml'
   workflow_dispatch:
 
 jobs:
