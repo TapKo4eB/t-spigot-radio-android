@@ -23,9 +23,6 @@ jobs:
           java-version: 'latest'
           cache: 'gradle'
 
-      - name: Decode keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > tspigot_release_key.jks
-        
       - name: chmooooooood
         run: chmod +x ./gradlew
 
