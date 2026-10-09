@@ -27,12 +27,14 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import net.tspigot.radio.R
 import net.tspigot.radio.service.PlaybackService
+import java.util.concurrent.ExecutionException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -120,7 +122,9 @@ private suspend fun <T> ListenableFuture<T>.awaitResult(context: Context): T =
         addListener(
             {
                 try {
-                    cont.resume(get())
+                    cont.resume(Futures.getDone(this))
+                } catch (e: ExecutionException) {
+                    cont.resumeWithException(e.cause ?: e)
                 } catch (e: Exception) {
                     cont.resumeWithException(e)
                 }
