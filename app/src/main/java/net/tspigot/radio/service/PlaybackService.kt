@@ -1,7 +1,13 @@
 package net.tspigot.radio.service
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -26,6 +32,8 @@ import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.time.Duration.Companion.seconds
+import androidx.core.content.edit
+import net.tspigot.radio.R
 
 class PlaybackService : MediaSessionService() {
 
@@ -36,10 +44,20 @@ class PlaybackService : MediaSessionService() {
     companion object {
         private val MAIN_TYPES = setOf("FULL_TRACK", "AMBIENCE", "BED", "COMMERCIAL", "BUMP")
         private val OTHER_TYPES = setOf("VOICE", "ENV", "RHYTHM")
+        const val ACTION_PLAY_STOP = "PLAY_STOP"
+        private const val PREFS = "radio_prefs"
+        private const val KEY_IS_PLAYING = "is_playing"
+
+        fun isPlaying(context: Context): Boolean {
+            return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_IS_PLAYING, false)
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
+
+        startForeground(1, createNotification())
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -103,6 +121,23 @@ class PlaybackService : MediaSessionService() {
                 delay(10.seconds)
             }
         }
+    }
+
+    private fun createNotification(): Notification {
+        val channelId = "radio_playback"
+
+        val channel = NotificationChannel(
+            channelId,
+            "Radio Playback",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+
+        return NotificationCompat.Builder(this, channelId)
+            .setContentTitle("t spigot radio")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
     }
 
     override fun onGetSession(
@@ -198,6 +233,31 @@ class PlaybackService : MediaSessionService() {
             stopSelf()
         }
         super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_PLAY_STOP -> togglePlayStop()
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun setPlayingState(playing: Boolean) {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit {
+                putBoolean(KEY_IS_PLAYING, playing)
+            }
+    }
+
+    private fun togglePlayStop() {
+        val p = player ?: return
+        if (p.isPlaying) {
+            p.stop()
+            setPlayingState(false)
+        } else {
+            p.play()
+            setPlayingState(true)
+        }
     }
 
     override fun onDestroy() {
