@@ -58,6 +58,7 @@
 
         <receiver
             android:name=".widget.RadioWidgetReceiver"
+            android:label="player controls"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
