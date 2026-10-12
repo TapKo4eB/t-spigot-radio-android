@@ -2,6 +2,7 @@ package net.tspigot.radio.widget
 
 import android.content.ComponentName
 import android.content.Context
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -15,8 +16,10 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -24,6 +27,7 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.glance.unit.ColorProvider
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -66,18 +70,30 @@ class RadioWidget : GlanceAppWidget() {
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .background(Color(0xFF282C34)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    provider = ImageProvider(
-                        if (isPlaying) R.drawable.pause else R.drawable.play
-                    ),
-                    contentDescription = if (isPlaying) "Stop" else "Play",
-                    modifier = GlanceModifier
-                        .size(48.dp)
-                        .clickable(actionRunCallback<PlayStopAction>())
+                    provider = ImageProvider(R.drawable.trees),
+                    contentDescription = null,
+                    modifier = GlanceModifier.fillMaxSize()
                 )
+                Box(
+                    modifier = GlanceModifier
+                        .size(56.dp)
+                        .cornerRadius(8.dp)
+                        .clickable(actionRunCallback<PlayStopAction>()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(
+                            if (isPlaying) R.drawable.pause else R.drawable.play
+                        ),
+                        contentDescription = if (isPlaying) "Stop" else "Play",
+                        modifier = GlanceModifier
+                            .size(40.dp)
+                    )
+                }
             }
         }
     }
