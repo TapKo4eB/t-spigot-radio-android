@@ -13,8 +13,8 @@ android {
         applicationId = "net.tspigot.radio"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.0.9"
+        versionCode = 12
+        versionName = "0.0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
