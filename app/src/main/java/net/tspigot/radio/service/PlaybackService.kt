@@ -6,7 +6,6 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -15,8 +14,6 @@ import androidx.media3.session.MediaSessionService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -25,7 +22,6 @@ import net.tspigot.radio.AppConfig
 import net.tspigot.radio.data.NowPlaying
 import net.tspigot.radio.data.NowPlayingResponse
 import net.tspigot.radio.ui.activities.MainActivity
-import net.tspigot.radio.widget.RadioWidget
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
@@ -36,12 +32,10 @@ class PlaybackService : MediaSessionService() {
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private var trackJob: Job? = null
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     companion object {
         private val MAIN_TYPES = setOf("FULL_TRACK", "AMBIENCE", "BED", "COMMERCIAL", "BUMP")
         private val OTHER_TYPES = setOf("VOICE", "ENV", "RHYTHM")
-
     }
 
     override fun onCreate() {
@@ -52,21 +46,27 @@ class PlaybackService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(AppConfig.userAgent)
 
+        val customUserAgent = AppConfig.userAgent
+
+        // Create HttpDataSource factory with custom user agent
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(customUserAgent)
+
+        // Create MediaSourceFactory with custom HttpDataSource
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(httpDataSourceFactory)
 
-        val exo = ExoPlayer.Builder(this)
+        player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
-        player = exo
+
+        val stationUrl = "https://radio.tspigot.net/radio/radio.mp3"
 
         val initialItem = MediaItem.Builder()
-            .setUri("https://radio.tspigot.net/radio/radio.mp3")
+            .setUri(stationUrl)
             .setMediaId("station_1")
             .setMediaMetadata(
                 MediaMetadata.Builder()
@@ -78,32 +78,23 @@ class PlaybackService : MediaSessionService() {
             )
             .build()
 
-        exo.setMediaItem(initialItem)
-        exo.prepare()
+        player!!.setMediaItem(initialItem)
+        player!!.prepare()
 
-        val widgetSync = object : Player.Listener {
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = sync()
-            override fun onPlaybackStateChanged(playbackState: Int) = sync()
-
-            private fun sync() {
-                val playing = exo.playWhenReady && exo.playbackState != Player.STATE_IDLE
-                serviceScope.launch { RadioWidget.setPlaying(this@PlaybackService, playing) }
-            }
-        }
-        exo.addListener(widgetSync)
-
+        val activityIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            activityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        mediaSession = MediaSession.Builder(this, exo)
+
+        mediaSession = MediaSession.Builder(this, player!!)
             .setSessionActivity(pendingIntent)
             .build()
 
-        trackJob = serviceScope.launch {
+        trackJob = CoroutineScope(Dispatchers.Main.immediate).launch {
             while (isActive) {
                 val response = fetchCurrentTracks()
                 if (response.tracks.isNotEmpty()) {
@@ -131,6 +122,8 @@ class PlaybackService : MediaSessionService() {
         val title = mainTrack.title ?: "Unknown track"
         val artist = mainTrack.artist ?: "Unknown artist"
 
+        // Encode all OTHER tracks into the description field so the UI can
+        // reconstruct the full "with X, with Y, ..." list.
         val description = if (otherTracks.isNotEmpty()) {
             "MULTI:" + otherTracks.joinToString(";;") { track ->
                 val otherTitle = track.title ?: "Unknown track"
@@ -164,7 +157,11 @@ class PlaybackService : MediaSessionService() {
             connection.requestMethod = "GET"
             connection.connectTimeout = 5_000
             connection.readTimeout = 5_000
-            connection.setRequestProperty("User-Agent", AppConfig.userAgent)
+
+            connection.setRequestProperty(
+                "User-Agent",
+                AppConfig.userAgent
+            )
 
             if (connection.responseCode !in 200..299) return@withContext NowPlayingResponse()
 
@@ -174,6 +171,8 @@ class PlaybackService : MediaSessionService() {
             if (jsonArray.length() == 0) return@withContext NowPlayingResponse()
 
             val tracks = mutableListOf<NowPlaying>()
+
+            // The API can return any number of tracks now, so read all of them.
             for (i in 0 until jsonArray.length()) {
                 val trackJson = jsonArray.getJSONObject(i)
                 tracks.add(
@@ -195,27 +194,18 @@ class PlaybackService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Keep the radio playing if the app is removed from Recents.
-        if (player?.playWhenReady != true) {
+        if (player?.isPlaying != true) {
             stopSelf()
         }
         super.onTaskRemoved(rootIntent)
     }
 
-
     override fun onDestroy() {
-        trackJob?.cancel()
-        serviceScope.cancel()
-
-        // The service scope is cancelled, so use the app context on a separate scope.
-        val appContext = applicationContext
-        CoroutineScope(Dispatchers.Default).launch {
-            RadioWidget.setPlaying(appContext, false)
-        }
-
         mediaSession?.run {
             player.release()
             release()
         }
+
         mediaSession = null
         player = null
 
