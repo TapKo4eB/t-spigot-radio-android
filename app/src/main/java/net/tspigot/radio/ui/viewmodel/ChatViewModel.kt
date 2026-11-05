@@ -43,6 +43,7 @@ class ChatViewModel(
     val uiState = _uiState.asStateFlow()
     private val store = ChatMessageStore()
     private var socket: WebSocket? = null
+    private val chatTag = "ChatWebSocket"
     private var sentName: String? = null
     private var reconnectJob: Job? = null
     private var generation = 0
@@ -119,6 +120,7 @@ class ChatViewModel(
             val payload = buildOutgoingPayload("/name $name")
             if (payload != null && ws.send(payload.json)) sentName = name
         }
+        Log.d(chatTag, "Sending in chat: $json")
         return ws.send(json)
     }
 
@@ -142,11 +144,13 @@ class ChatViewModel(
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) = publish {
+                Log.d(chatTag, "WebSocket opened")
                 store.reset()
                 _uiState.update { it.copy(connected = true) }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(chatTag, "Message received: $text")
                 try {
                     val json = JSONObject(text)
                     val messages = if (json.has("history")) {
@@ -159,15 +163,25 @@ class ChatViewModel(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = publish {
+                Log.d(chatTag, "WebSocket closing - Code: $code, Reason: $reason")
                 _uiState.update { it.copy(connected = false) }
                 webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = publish {
+                Log.d(chatTag, "WebSocket closed - Code: $code, Reason: $reason")
                 connectionLost()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = publish {
+                Log.d(chatTag, "WebSocket failure: Cause: ${t.cause} Message: ${t.message}")
+                Log.d(chatTag, "Stack trace: ${t.stackTraceToString()}")
+                if (response != null) {
+                    Log.d(chatTag, "HTTP Code: ${response.code}, Message: ${response.message}")
+                    Log.d(chatTag, "Headers: ${response.headers}")
+                } else {
+                    Log.d(chatTag, "No HTTP response (likely network error?)")
+                }
                 connectionLost()
             }
         }
@@ -194,6 +208,5 @@ class ChatViewModel(
         reconnectJob?.cancel()
         socket?.close(1000, "bye")
         socket = null
-        super.onCleared()
     }
 }
